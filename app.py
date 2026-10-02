@@ -10,6 +10,7 @@ from datetime import datetime
 import numpy as np
 import openpyxl
 from openpyxl.drawing.image import Image as OpenPyxlImage
+import time
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(
@@ -18,6 +19,57 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed"
 )
+
+# --- MAPEAMENTO DINÂMICO DE MUNIÇÕES POR TIPO DE ARMA ---
+OPCOES_MUNICAO_POR_ARMA = {
+    "Pistola": [
+        "9mm Luger",
+        ".380 ACP",
+        ".40 S&W",
+        ".45 ACP",
+        ".38 TPC",
+        ".22 LR",
+        ".38 Super Auto",
+        "10mm Auto",
+        "7,65mm Browning",
+        "6,35mm (.25 ACP)"
+    ],
+    "Revólver": [
+        ".38 SPL",
+        ".357 Magnum",
+        ".22 LR",
+        ".32 S&W / Longo",
+        ".44 Magnum",
+        ".454 Casull",
+        ".22 WMR",
+        ".44-40 WCF"
+    ],
+    "Carabina/Fuzil": [
+        "5.56x45mm / .223 Rem",
+        ".22 LR",
+        "9mm Luger",
+        ".300 Blackout",
+        ".308 Win / 7.62x51mm",
+        ".38 SPL",
+        ".357 Magnum",
+        ".40 S&W",
+        ".380 ACP",
+        ".17 HMR",
+        "6.5 Creedmoor",
+        ".44 Magnum",
+        ".44-40 WCF",
+        ".30-06 Springfield"
+    ],
+    "Espingarda": [
+        "12 GA",
+        "20 GA",
+        "28 GA",
+        "36 GA / .410",
+        "16 GA",
+        "24 GA",
+        "32 GA"
+    ]
+}
 
 # --- BANCO DE DADOS (SQLite) ---
 DB_NAME = "habituacoes.db"
@@ -164,7 +216,7 @@ if aba == "🎯 Registro de Habituação (Atirador)":
         
         if termo_busca:
             df_filtrado = df_atiradores[
-                df_atiradores['rotulo'].str.contains(termo_busca, case=False, na=False)
+                df_filtrado['rotulo'].str.contains(termo_busca, case=False, na=False)
             ]
         else:
             df_filtrado = df_atiradores
@@ -190,14 +242,13 @@ if aba == "🎯 Registro de Habituação (Atirador)":
 
             col1, col2 = st.columns(2)
             with col1:
-                tipo_arma = st.selectbox("Tipo de Arma:", ["Pistola", "Revólver", "Carabina", "Fuzil", "Espingarda"])
+                tipo_arma = st.selectbox("Tipo de Arma:", list(OPCOES_MUNICAO_POR_ARMA.keys()))
             with col2:
-                tipo_municao = st.selectbox("Tipo/Calibre de Munição:", [
-                    "9mm Luger", ".40 S&W", ".380 ACP", ".38 SPL", 
-                    ".45 ACP", ".22 LR", "5.56x45mm", "12 GA"
-                ])
+                # Carrega dinamicamente a lista de munições de acordo com a arma selecionada
+                municoes_disponiveis = OPCOES_MUNICAO_POR_ARMA[tipo_arma]
+                tipo_municao = st.selectbox("Tipo/Calibre de Munição:", municoes_disponiveis)
 
-            qtd_municao = st.number_input("Quantidade de Munição Utilizada:", min_value=1, max_value=1000, value=50, step=10)
+            qtd_input = st.text_input("Quantidade de Munição Utilizada:", value="50", placeholder="Ex: 50, 100, 250...")
 
             st.subheader("🖋️ Assinatura Digital")
             st.caption("Assine dentro da caixa abaixo:")
@@ -223,6 +274,15 @@ if aba == "🎯 Registro de Habituação (Atirador)":
             st.info("📌 Registro com carimbo de tempo e hash criptográfico de validação (Lei 14.063/2020).")
 
             if st.button("✅ Registrar Habituação", type="primary", use_container_width=True):
+                try:
+                    qtd_municao = int(qtd_input.strip())
+                    if qtd_municao <= 0:
+                        st.error("A quantidade de munição deve ser maior que zero.")
+                        st.stop()
+                except ValueError:
+                    st.error("Por favor, informe um número válido para a quantidade de munição.")
+                    st.stop()
+
                 img_data = canvas_result.image_data if canvas_result is not None else None
 
                 assinatura_valida = False
@@ -245,8 +305,16 @@ if aba == "🎯 Registro de Habituação (Atirador)":
                         img_data
                     )
                     st.session_state["canvas_key"] += 1
-                    st.success("Habituação registrada com sucesso!")
-                    st.balloons()
+                    
+                    st.markdown("""
+                        <div style="text-align: center; padding: 20px; background-color: #d4edda; border-radius: 10px; border: 2px solid #28a745;">
+                            <h1 style="color: #155724; margin: 0;">💥 🎯 💥</h1>
+                            <h2 style="color: #155724; margin-top: 10px;">HABITUALIDADE CONCLUÍDA!</h2>
+                            <p style="color: #155724; font-size: 18px;">Registro inserido com sucesso na base de dados.</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    time.sleep(10)
                     st.rerun()
                 else:
                     st.error("Por favor, faça a assinatura antes de salvar.")
