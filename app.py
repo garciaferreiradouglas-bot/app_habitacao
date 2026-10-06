@@ -97,16 +97,16 @@ def get_lista_atiradores():
 def processar_imagem_canvas(img_array):
     try:
         img_uint8 = img_array.astype(np.uint8)
-        
-        # Cria imagem PIL a partir do array (RGBA)
         img_pil = Image.fromarray(img_uint8, mode="RGBA")
         
-        # Cria fundo branco e combina com o desenho em preto
+        # Otimiza o tamanho da imagem para economizar espaço
+        img_pil.thumbnail((300, 150))
+        
         background = Image.new("RGB", img_pil.size, (255, 255, 255))
-        background.paste(img_pil, mask=img_pil.split()[3]) # canal Alpha como máscara
+        background.paste(img_pil, mask=img_pil.split()[3])
         
         buffered = io.BytesIO()
-        background.save(buffered, format="PNG")
+        background.save(buffered, format="PNG", optimize=True)
         return base64.b64encode(buffered.getvalue()).decode('utf-8')
     except Exception as e:
         st.error(f"Erro ao processar imagem da assinatura: {e}")
@@ -122,7 +122,6 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     data_hora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     registro_id = str(uuid.uuid4())[:8]
 
-    # Cálculo do Hash SHA-256
     payload_validacao = f"{data_hora_str}|{nome}|{cr}|{sigma}|{arma}|{municao}|{qtd}|{assinatura_b64[:50]}"
     hash_integridade = hashlib.sha256(payload_validacao.encode('utf-8')).hexdigest()
 
@@ -157,7 +156,6 @@ def carregar_habituacoes_sheets():
 
 # --- BUSCA A COLUNA DA ASSINATURA INDEPENDENTE DO NOME ---
 def obter_valor_assinatura(row):
-    """Busca a string Base64 em qualquer coluna de assinatura existente na linha."""
     colunas_possiveis = ['assinatura_base64a', 'assinatura_base64', 'assinatura', 'Assinatura Digital']
     
     for col in colunas_possiveis:
@@ -234,7 +232,6 @@ def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     
-    # Cabeçalho
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, "RELATÓRIO DE HABITUAÇÃO DE ATIRADOR", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font("Helvetica", "", 12)
@@ -246,7 +243,6 @@ def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
         
     pdf.ln(8)
     
-    # Registos
     for idx, row in df_cliente.iterrows():
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(0, 6, f"Registo ID: {row.get('id', '')} - Data/Hora: {row.get('data_hora', '')}", border="T", new_x="LMARGIN", new_y="NEXT")
@@ -258,7 +254,6 @@ def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
         pdf.set_font("Helvetica", "I", 8)
         pdf.cell(0, 5, f"Hash SHA-256: {hash_val}", border=0, new_x="LMARGIN", new_y="NEXT")
         
-        # Inserção da Assinatura
         ass_b64 = obter_valor_assinatura(row)
         if ass_b64:
             try:
@@ -299,15 +294,20 @@ if aba == "🎯 Registro de Habituação (Atirador)":
 
     if not lista_opcoes:
         nome_atirador = st.text_input("Nome do Atirador:")
-        cr_atirador = st.text_input("CR do Atirador:")
+        cr_padrao = ""
     else:
         opcao_selecionada = st.selectbox("Selecione seu Nome / CR:", options=lista_opcoes, index=0)
         row_atirador = df_filtrado[df_filtrado['rotulo'] == opcao_selecionada].iloc[0]
         nome_atirador = row_atirador['nome']
-        cr_atirador = row_atirador['cr']
+        cr_padrao = row_atirador['cr']
 
-    if nome_atirador and cr_atirador:
-        sigma_atirador = st.text_input("Número do SIGMA:", placeholder="Informe o número do SIGMA")
+    if nome_atirador:
+        # COLUNAS LADO A LADO PARA SIGMA E CR
+        col_sigma, col_cr = st.columns(2)
+        with col_sigma:
+            sigma_atirador = st.text_input("Número do SIGMA:", placeholder="Informe o número do SIGMA")
+        with col_cr:
+            cr_atirador = st.text_input("Número do CR:", value=cr_padrao, placeholder="Informe o número do CR")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -350,7 +350,6 @@ if aba == "🎯 Registro de Habituação (Atirador)":
 
             img_data = canvas_result.image_data if canvas_result is not None else None
 
-            # Validação do desenho
             assinatura_valida = False
             if img_data is not None and isinstance(img_data, np.ndarray):
                 if img_data.shape[2] == 4:
@@ -384,9 +383,8 @@ else:
     with st.spinner("Buscando registros da nuvem..."):
         df_hab = carregar_habituacoes_sheets()
 
-    # Preenchimento do filtro (Marcação Verde)
     with col_filtro:
-        st.write("") # Espaçamento para alinhamento
+        st.write("")
         if not df_hab.empty and 'nome_atirador' in df_hab.columns:
             lista_clientes = ["Todos os Atiradores"] + sorted([x for x in df_hab['nome_atirador'].unique() if x])
         else:
@@ -399,13 +397,11 @@ else:
     if df_hab.empty:
         st.info("Nenhuma habituação registrada até o momento.")
     else:
-        # Aplicar filtragem no DataFrame
         if cliente_selecionado != "Todos os Atiradores":
             df_exibicao_base = df_hab[df_hab['nome_atirador'] == cliente_selecionado]
         else:
             df_exibicao_base = df_hab.copy()
 
-        # Oculta colunas longas da tabela de visão geral
         cols_ocultar = [c for c in df_exibicao_base.columns if 'assinatura' in c.lower()]
         df_exibicao = df_exibicao_base.drop(columns=cols_ocultar, errors='ignore')
         st.dataframe(df_exibicao, use_container_width=True)
@@ -442,7 +438,6 @@ else:
 
         st.markdown("---")
         
-        # --- BOTÕES DE DOWNLOAD (Marcação Roxa) ---
         col_btn_excel, col_btn_pdf = st.columns([1, 1])
 
         with col_btn_excel:
