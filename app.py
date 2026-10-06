@@ -50,7 +50,10 @@ def get_gspread_client():
 
     # Converte caracteres '\n' literais em quebras de linha reais exigidas pela chave RSA
     if "private_key" in creds_info:
-        creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
+        key_str = creds_info["private_key"]
+        if "\\n" in key_str:
+            key_str = key_str.replace("\\n", "\n")
+        creds_info["private_key"] = key_str
 
     creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
     client = gspread.authorize(creds)
