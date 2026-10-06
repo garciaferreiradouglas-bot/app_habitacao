@@ -145,7 +145,7 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
         arma,
         municao,
         int(qtd),
-        assinatura_b64,  # Salva o Base64 puro para evitar erro de limite na célula
+        assinatura_b64,  # Salva em Base64 puro
         hash_integridade
     ]
 
@@ -167,13 +167,22 @@ def carregar_habituacoes_sheets():
 
 # --- EXTRAIR BASE64 LIMPO ---
 def extrair_base64(valor):
-    """Garante que recebemos a string Base64 limpa para renderização no app e Excel."""
-    valor_str = str(valor)
-    if 'data:image/png;base64,' in valor_str:
+    """Extrai e limpa a string Base64 independente do formato salvo na linha."""
+    if not valor:
+        return ""
+    
+    valor_str = str(valor).strip()
+
+    # Tratamento para formatos antigos com data:image ou fórmulas =IMAGE()
+    if "data:image" in valor_str:
         try:
-            return valor_str.split('data:image/png;base64,')[1].split('"')[0]
+            parte_b64 = valor_str.split("base64,")[1]
+            parte_b64 = parte_b64.split('"')[0].split("'")[0].split(')')[0]
+            return parte_b64.strip()
         except Exception:
             return ""
+
+    # Se já for Base64 puro
     return valor_str
 
 # --- FUNÇÃO PARA GERAR EXCEL COM ASSINATURAS ---
