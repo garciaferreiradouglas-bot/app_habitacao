@@ -122,7 +122,7 @@ ATIRADORES_PADRAO = [
 def get_lista_atiradores():
     return pd.DataFrame(ATIRADORES_PADRAO)
 
-# --- FUNÇÃO PARA SALVAR NO GOOGLE SHEETS COM IMAGEM RENDERIZADA ---
+# --- FUNÇÃO PARA SALVAR NO GOOGLE SHEETS (BASE64 PURO) ---
 def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     im = Image.fromarray(img_array.astype('uint8'))
     buffered = io.BytesIO()
@@ -132,12 +132,9 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     data_hora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     registro_id = str(uuid.uuid4())[:8]
 
-    # O hash é calculado sobre a string base64 original para manter a integridade
+    # Cálculo do hash de integridade
     payload_validacao = f"{data_hora_str}|{nome}|{cr}|{sigma}|{arma}|{municao}|{qtd}|{assinatura_b64[:50]}"
     hash_integridade = hashlib.sha256(payload_validacao.encode('utf-8')).hexdigest()
-
-    # Formata a coluna de assinatura como fórmula =IMAGE("data:image/png;base64,...")
-    formula_imagem = f'=IMAGE("data:image/png;base64,{assinatura_b64}")'
 
     linha_dados = [
         registro_id,
@@ -148,13 +145,12 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
         arma,
         municao,
         int(qtd),
-        formula_imagem,
+        assinatura_b64,  # Salva o Base64 puro para evitar erro de limite na célula
         hash_integridade
     ]
 
     sheet = get_sheet()
-    # USER_ENTERED faz o Google Sheets interpretar a string como FÓRMULA em vez de texto puro
-    sheet.append_row(linha_dados, value_input_option="USER_ENTERED")
+    sheet.append_row(linha_dados)
 
 # --- FUNÇÃO PARA CARREGAR REGISTROS DO GOOGLE SHEETS ---
 def carregar_habituacoes_sheets():
@@ -169,9 +165,9 @@ def carregar_habituacoes_sheets():
         st.error(f"Erro ao carregar dados do Google Sheets: {e}")
         return pd.DataFrame()
 
-# --- EXTRAIR BASE64 DA FÓRMULA OU TEXTO ---
+# --- EXTRAIR BASE64 LIMPO ---
 def extrair_base64(valor):
-    """Extrai a string base64 limpa, seja enviada como texto puro ou fórmula =IMAGE()."""
+    """Garante que recebemos a string Base64 limpa para renderização no app e Excel."""
     valor_str = str(valor)
     if 'data:image/png;base64,' in valor_str:
         try:
