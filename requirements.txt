@@ -1,3 +1,9 @@
 streamlit
+streamlit-drawable-canvas
+pandas
+Pillow
+numpy
+openpyxl
 gspread
 google-auth
+fpdf2
