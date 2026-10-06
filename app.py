@@ -14,6 +14,9 @@ import uuid
 import json
 import gspread
 from google.oauth2.service_account import Credentials
+from fpdf import FPDF
+import tempfile
+import os
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(
@@ -155,14 +158,12 @@ def carregar_habituacoes_sheets():
 # --- BUSCA A COLUNA DA ASSINATURA INDEPENDENTE DO NOME ---
 def obter_valor_assinatura(row):
     """Busca a string Base64 em qualquer coluna de assinatura existente na linha."""
-    # Nomes comuns de coluna
     colunas_possiveis = ['assinatura_base64a', 'assinatura_base64', 'assinatura', 'Assinatura Digital']
     
     for col in colunas_possiveis:
         if col in row and pd.notna(row[col]) and str(row[col]).strip() != "":
             val_str = str(row[col]).strip()
             
-            # Se contiver prefixos de URL/Fórmula
             if "base64," in val_str:
                 try:
                     return val_str.split("base64,")[1].split('"')[0].split("'")[0].split(')')[0].strip()
@@ -171,7 +172,6 @@ def obter_valor_assinatura(row):
             elif len(val_str) > 100 and not val_str.startswith("http") and not val_str.startswith("="):
                 return val_str
                 
-    # Tenta pegar pela 9ª coluna (índice 8) caso a busca por nome falhe
     try:
         val_ind = row.iloc[8]
         if pd.notna(val_ind) and len(str(val_ind)) > 100:
@@ -227,6 +227,54 @@ def gerar_excel_com_assinaturas(df_hab):
     wb.save(buffer)
     buffer.seek(0)
     return buffer.getvalue()
+
+# --- GERAÇÃO DE RELATÓRIO PDF DO CLIENTE ---
+def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    
+    # Cabeçalho
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "RELATÓRIO DE HABITUAÇÃO DE ATIRADOR", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 8, f"Atirador: {nome_cliente}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
+    
+    cr_val = df_cliente['cr_atirador'].iloc[0] if 'cr_atirador' in df_cliente.columns and not df_cliente.empty else ""
+    if cr_val:
+        pdf.cell(0, 6, f"CR: {cr_val}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
+        
+    pdf.ln(8)
+    
+    # Registos
+    for idx, row in df_cliente.iterrows():
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(0, 6, f"Registo ID: {row.get('id', '')} - Data/Hora: {row.get('data_hora', '')}", border="T", new_x="LMARGIN", new_y="NEXT")
+        
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(0, 5, f"SIGMA: {row.get('sigma_atirador', 'N/A')} | Arma: {row.get('tipo_arma', '')} | Munição: {row.get('tipo_municao', '')} | Qtd: {row.get('qtd_municao', '')}", border=0, new_x="LMARGIN", new_y="NEXT")
+        
+        hash_val = str(row.get('hash_integridade', ''))
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.cell(0, 5, f"Hash SHA-256: {hash_val}", border=0, new_x="LMARGIN", new_y="NEXT")
+        
+        # Inserção da Assinatura
+        ass_b64 = obter_valor_assinatura(row)
+        if ass_b64:
+            try:
+                img_bytes = base64.b64decode(ass_b64)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+                    tmp_file.write(img_bytes)
+                    tmp_path = tmp_file.name
+                
+                pdf.image(tmp_path, x=15, w=50)
+                os.remove(tmp_path)
+            except Exception:
+                pdf.cell(0, 5, "[Assinatura Indisponível]", border=0, new_x="LMARGIN", new_y="NEXT")
+        
+        pdf.ln(5)
+
+    return bytes(pdf.output())
 
 # --- ESTADO INICIAL ---
 if "canvas_key" not in st.session_state:
@@ -327,23 +375,44 @@ if aba == "🎯 Registro de Habituação (Atirador)":
                 st.error("Por favor, assine o campo de assinatura antes de salvar.")
 
 else:
-    st.title("📊 Painel Administrativo")
-    st.write("Visualização de registros salvos no Google Sheets e exportação em Excel.")
+    # --- PAINEL ADMINISTRATIVO COM FILTRO ---
+    col_titulo, col_filtro = st.columns([1.5, 1])
 
+    with col_titulo:
+        st.title("📊 Painel Administrativo")
+        
     with st.spinner("Buscando registros da nuvem..."):
         df_hab = carregar_habituacoes_sheets()
+
+    # Preenchimento do filtro (Marcação Verde)
+    with col_filtro:
+        st.write("") # Espaçamento para alinhamento
+        if not df_hab.empty and 'nome_atirador' in df_hab.columns:
+            lista_clientes = ["Todos os Atiradores"] + sorted([x for x in df_hab['nome_atirador'].unique() if x])
+        else:
+            lista_clientes = ["Todos os Atiradores"]
+            
+        cliente_selecionado = st.selectbox("🎯 Filtrar por Atirador:", options=lista_clientes)
+
+    st.write("Visualização de registros salvos no Google Sheets e exportação em Excel/PDF.")
 
     if df_hab.empty:
         st.info("Nenhuma habituação registrada até o momento.")
     else:
+        # Aplicar filtragem no DataFrame
+        if cliente_selecionado != "Todos os Atiradores":
+            df_exibicao_base = df_hab[df_hab['nome_atirador'] == cliente_selecionado]
+        else:
+            df_exibicao_base = df_hab.copy()
+
         # Oculta colunas longas da tabela de visão geral
-        cols_ocultar = [c for c in df_hab.columns if 'assinatura' in c.lower()]
-        df_exibicao = df_hab.drop(columns=cols_ocultar, errors='ignore')
+        cols_ocultar = [c for c in df_exibicao_base.columns if 'assinatura' in c.lower()]
+        df_exibicao = df_exibicao_base.drop(columns=cols_ocultar, errors='ignore')
         st.dataframe(df_exibicao, use_container_width=True)
 
         st.subheader("🔍 Visualizar Registros e Assinaturas")
         
-        for idx, row in df_hab.iterrows():
+        for idx, row in df_exibicao_base.iterrows():
             nome = row.get('nome_atirador', '')
             dt = row.get('data_hora', '')
             reg_id = row.get('id', idx)
@@ -373,12 +442,36 @@ else:
 
         st.markdown("---")
         
-        excel_data = gerar_excel_com_assinaturas(df_hab)
-        
-        st.download_button(
-            label="📥 Baixar Planilha Completa com Assinaturas (Excel)",
-            data=excel_data,
-            file_name=f"habituacoes_com_assinaturas_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary"
-        )
+        # --- BOTÕES DE DOWNLOAD (Marcação Roxa) ---
+        col_btn_excel, col_btn_pdf = st.columns([1, 1])
+
+        with col_btn_excel:
+            excel_data = gerar_excel_com_assinaturas(df_exibicao_base)
+            
+            st.download_button(
+                label="📥 Baixar Planilha Completa com Assinaturas (Excel)",
+                data=excel_data,
+                file_name=f"habituacoes_com_assinaturas_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True
+            )
+
+        with col_btn_pdf:
+            if cliente_selecionado != "Todos os Atiradores" and not df_exibicao_base.empty:
+                pdf_data = gerar_pdf_relatorio_cliente(df_exibicao_base, cliente_selecionado)
+                
+                st.download_button(
+                    label=f"📄 Baixar Relatório PDF ({cliente_selecionado})",
+                    data=pdf_data,
+                    file_name=f"relatorio_habituação_{cliente_selecionado.replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            else:
+                st.button(
+                    "📄 Selecione um Atirador para PDF",
+                    disabled=True,
+                    use_container_width=True,
+                    help="Selecione um atirador específico no filtro do topo para gerar o relatório em PDF."
+                )
