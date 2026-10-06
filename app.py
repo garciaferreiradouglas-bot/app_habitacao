@@ -47,7 +47,6 @@ def get_gspread_client():
     else:
         creds_info = dict(sec_data)
 
-    # Converte caracteres \n literais para quebras de linha reais exigidas pela chave RSA
     if "private_key" in creds_info:
         creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
 
@@ -122,17 +121,42 @@ ATIRADORES_PADRAO = [
 def get_lista_atiradores():
     return pd.DataFrame(ATIRADORES_PADRAO)
 
-# --- FUNÇÃO PARA SALVAR NO GOOGLE SHEETS (BASE64 PURO) ---
+# --- CONVERTE MATRIZ DO CANVAS EM STRING BASE64 VÁLIDA ---
+def processar_imagem_canvas(img_array):
+    try:
+        # Garante array em uint8
+        img_uint8 = img_array.astype(np.uint8)
+        img_pil = Image.fromarray(img_uint8)
+        
+        # Converte para RGB com fundo branco caso haja transparência
+        if img_pil.mode in ("RGBA", "LA") or (img_pil.mode == "P" and "transparency" in img_pil.info):
+            background = Image.new("RGB", img_pil.size, (255, 255, 255))
+            if img_pil.mode == "RGBA":
+                background.paste(img_pil, mask=img_pil.split()[3])
+            else:
+                background.paste(img_pil)
+            img_pil = background
+        else:
+            img_pil = img_pil.convert("RGB")
+
+        buffered = io.BytesIO()
+        img_pil.save(buffered, format="JPEG", quality=85)
+        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+    except Exception as e:
+        st.error(f"Erro ao processar imagem: {e}")
+        return ""
+
+# --- FUNÇÃO PARA SALVAR NO GOOGLE SHEETS ---
 def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
-    im = Image.fromarray(img_array.astype('uint8'))
-    buffered = io.BytesIO()
-    im.save(buffered, format="PNG")
-    assinatura_b64 = base64.b64encode(buffered.getvalue()).decode()
+    assinatura_b64 = processar_imagem_canvas(img_array)
+    
+    if not assinatura_b64:
+        raise ValueError("Não foi possível gerar a assinatura digital em imagem.")
 
     data_hora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     registro_id = str(uuid.uuid4())[:8]
 
-    # Cálculo do hash de integridade
+    # Hash SHA-256 de integridade
     payload_validacao = f"{data_hora_str}|{nome}|{cr}|{sigma}|{arma}|{municao}|{qtd}|{assinatura_b64[:50]}"
     hash_integridade = hashlib.sha256(payload_validacao.encode('utf-8')).hexdigest()
 
@@ -145,7 +169,7 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
         arma,
         municao,
         int(qtd),
-        assinatura_b64,  # Salva em Base64 puro
+        assinatura_b64,
         hash_integridade
     ]
 
@@ -167,14 +191,12 @@ def carregar_habituacoes_sheets():
 
 # --- EXTRAIR BASE64 LIMPO ---
 def extrair_base64(valor):
-    """Extrai e limpa a string Base64 independente do formato salvo na linha."""
     if not valor:
         return ""
     
     valor_str = str(valor).strip()
 
-    # Tratamento para formatos antigos com data:image ou fórmulas =IMAGE()
-    if "data:image" in valor_str:
+    if "base64," in valor_str:
         try:
             parte_b64 = valor_str.split("base64,")[1]
             parte_b64 = parte_b64.split('"')[0].split("'")[0].split(')')[0]
@@ -182,7 +204,9 @@ def extrair_base64(valor):
         except Exception:
             return ""
 
-    # Se já for Base64 puro
+    if valor_str.startswith("#") or "VALUE" in valor_str or len(valor_str) < 50:
+        return ""
+
     return valor_str
 
 # --- FUNÇÃO PARA GERAR EXCEL COM ASSINATURAS ---
@@ -290,7 +314,7 @@ if aba == "🎯 Registro de Habituação (Atirador)":
             fill_color="rgba(255, 255, 255, 0)",
             stroke_width=3,
             stroke_color="#000000",
-            background_color="#F0F2F6",
+            background_color="#FFFFFF",
             height=200,
             drawing_mode="freedraw",
             update_streamlit=True,
@@ -376,8 +400,8 @@ else:
         st.subheader("🔍 Visualizar Registros e Assinaturas")
         
         for idx, row in df_hab.iterrows():
-            nome = row.get('nome_atirador', 'N/A')
-            dt = row.get('data_hora', 'N/A')
+            nome = row.get('nome_atirador', '')
+            dt = row.get('data_hora', '')
             reg_id = row.get('id', idx)
             
             with st.expander(f"ID #{reg_id} - {nome} ({dt})"):
