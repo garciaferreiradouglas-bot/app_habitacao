@@ -30,8 +30,13 @@ SCOPES = [
 
 @st.cache_resource
 def get_gspread_client():
-    """Autentica na API do Google usando os secrets do Streamlit."""
+    """Autentica na API do Google tratando a chave privada com segurança."""
     credentials_info = dict(st.secrets["gcp_service_account"])
+    
+    # Trata quebras de linha na private_key caso o TOML tenha desformatado
+    if "private_key" in credentials_info:
+        credentials_info["private_key"] = credentials_info["private_key"].replace("\\n", "\n")
+        
     creds = Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
     client = gspread.authorize(creds)
     return client
@@ -94,7 +99,7 @@ OPCOES_MUNICAO_POR_ARMA = {
     ]
 }
 
-# --- ATIRADORES CADASTRADOS (OU BUSCA MANUAL) ---
+# --- ATIRADORES CADASTRADOS ---
 ATIRADORES_PADRAO = [
     {"nome": "JOAO DA SILVA", "cr": "123456-CR", "rotulo": "JOAO DA SILVA - CR: 123456-CR"},
     {"nome": "MARIA OLIVEIRA", "cr": "654321-CR", "rotulo": "MARIA OLIVEIRA - CR: 654321-CR"},
