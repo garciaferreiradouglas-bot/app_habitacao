@@ -36,10 +36,9 @@ def get_gspread_client():
         st.error("A seção [gcp_service_account] não foi encontrada nos Secrets do Streamlit.")
         st.stop()
 
-    # Cria uma cópia mutável do dicionário obtido nos Secrets
     creds_info = dict(st.secrets["gcp_service_account"])
 
-    # Se os dados vieram empacotados em um bloco 'json_data'
+    # Tratamento caso os dados venham como string JSON empacotada
     if "json_data" in creds_info:
         raw_json = creds_info["json_data"]
         try:
@@ -48,12 +47,28 @@ def get_gspread_client():
             raw_json_cleaned = raw_json.replace('\n', '\\n').replace('\r', '')
             creds_info = json.loads(raw_json_cleaned, strict=False)
 
-    # Converte caracteres '\n' literais em quebras de linha reais exigidas pela chave RSA
+    # Limpeza e formatação rigorosa da chave privada RSA
     if "private_key" in creds_info:
-        key_str = creds_info["private_key"]
-        if "\\n" in key_str:
-            key_str = key_str.replace("\\n", "\n")
-        creds_info["private_key"] = key_str
+        pk = str(creds_info["private_key"]).strip()
+        
+        # Remove aspas extras se existirem
+        if pk.startswith('"') and pk.endswith('"'):
+            pk = pk[1:-1]
+        if pk.startswith("'") and pk.endswith("'"):
+            pk = pk[1:-1]
+        
+        # Converte \n literais para quebras de linha reais
+        pk = pk.replace("\\n", "\n")
+        
+        # Assegura o cabeçalho e rodapé limpos do formato PEM
+        if "-----BEGIN PRIVATE KEY-----" in pk and "-----END PRIVATE KEY-----" in pk:
+            core = pk.split("-----BEGIN PRIVATE KEY-----")[1].split("-----END PRIVATE KEY-----")[0]
+            core_clean = "".join(core.split())  # remove espaços e quebras extras do corpo
+            
+            # Reconstrução com quebras de linha a cada 64 caracteres (padrão PEM)
+            lines = [core_clean[i:i+64] for i in range(0, len(core_clean), 64)]
+            pk_formatted = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(lines) + "\n-----END PRIVATE KEY-----\n"
+            creds_info["private_key"] = pk_formatted
 
     creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
     client = gspread.authorize(creds)
