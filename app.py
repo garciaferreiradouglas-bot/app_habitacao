@@ -11,6 +11,7 @@ import openpyxl
 from openpyxl.drawing.image import Image as OpenPyxlImage
 import time
 import uuid
+import json
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -30,13 +31,9 @@ SCOPES = [
 
 @st.cache_resource
 def get_gspread_client():
-    """Autentica na API do Google tratando a chave privada com segurança."""
-    credentials_info = dict(st.secrets["gcp_service_account"])
-    
-    # Trata quebras de linha na private_key caso o TOML tenha desformatado
-    if "private_key" in credentials_info:
-        credentials_info["private_key"] = credentials_info["private_key"].replace("\\n", "\n")
-        
+    """Autentica lendo o JSON de credenciais guardado nas Secrets."""
+    raw_json = st.secrets["gcp_service_account"]["json_data"]
+    credentials_info = json.loads(raw_json)
     creds = Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
     client = gspread.authorize(creds)
     return client
@@ -44,7 +41,6 @@ def get_gspread_client():
 def get_sheet():
     """Obtém a folha principal do Google Sheets."""
     client = get_gspread_client()
-    # Abre a planilha pelo nome exato compartilhada com a Service Account
     spreadsheet = client.open("Habituacoes_Clube")
     return spreadsheet.sheet1
 
