@@ -122,7 +122,7 @@ ATIRADORES_PADRAO = [
 def get_lista_atiradores():
     return pd.DataFrame(ATIRADORES_PADRAO)
 
-# --- FUNÇÃO PARA SALVAR NO GOOGLE SHEETS ---
+# --- FUNÇÃO PARA SALVAR NO GOOGLE SHEETS COM IMAGEM RENDERIZADA ---
 def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     im = Image.fromarray(img_array.astype('uint8'))
     buffered = io.BytesIO()
@@ -132,8 +132,12 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     data_hora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     registro_id = str(uuid.uuid4())[:8]
 
+    # O hash é calculado sobre a string base64 original para manter a integridade
     payload_validacao = f"{data_hora_str}|{nome}|{cr}|{sigma}|{arma}|{municao}|{qtd}|{assinatura_b64[:50]}"
     hash_integridade = hashlib.sha256(payload_validacao.encode('utf-8')).hexdigest()
+
+    # Formata a coluna de assinatura como fórmula =IMAGE("data:image/png;base64,...")
+    formula_imagem = f'=IMAGE("data:image/png;base64,{assinatura_b64}")'
 
     linha_dados = [
         registro_id,
@@ -144,12 +148,13 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
         arma,
         municao,
         int(qtd),
-        assinatura_b64,
+        formula_imagem,
         hash_integridade
     ]
 
     sheet = get_sheet()
-    sheet.append_row(linha_dados)
+    # USER_ENTERED faz o Google Sheets interpretar a string como FÓRMULA em vez de texto puro
+    sheet.append_row(linha_dados, value_input_option="USER_ENTERED")
 
 # --- FUNÇÃO PARA CARREGAR REGISTROS DO GOOGLE SHEETS ---
 def carregar_habituacoes_sheets():
@@ -163,6 +168,17 @@ def carregar_habituacoes_sheets():
     except Exception as e:
         st.error(f"Erro ao carregar dados do Google Sheets: {e}")
         return pd.DataFrame()
+
+# --- EXTRAIR BASE64 DA FÓRMULA OU TEXTO ---
+def extrair_base64(valor):
+    """Extrai a string base64 limpa, seja enviada como texto puro ou fórmula =IMAGE()."""
+    valor_str = str(valor)
+    if 'data:image/png;base64,' in valor_str:
+        try:
+            return valor_str.split('data:image/png;base64,')[1].split('"')[0]
+        except Exception:
+            return ""
+    return valor_str
 
 # --- FUNÇÃO PARA GERAR EXCEL COM ASSINATURAS ---
 def gerar_excel_com_assinaturas(df_hab):
@@ -191,7 +207,9 @@ def gerar_excel_com_assinaturas(df_hab):
 
         ws.row_dimensions[row_idx].height = 50
 
-        assinatura_b64 = getattr(row, 'assinatura_base64', '')
+        bruto_assinatura = getattr(row, 'assinatura_base64', '')
+        assinatura_b64 = extrair_base64(bruto_assinatura)
+
         if assinatura_b64:
             try:
                 img_bytes = base64.b64decode(assinatura_b64)
@@ -370,7 +388,8 @@ else:
                 
                 with col_img:
                     st.markdown("**Assinatura Capturada:**")
-                    ass_b64 = row.get('assinatura_base64', '')
+                    bruto_ass = row.get('assinatura_base64', '')
+                    ass_b64 = extrair_base64(bruto_ass)
                     if ass_b64:
                         try:
                             img_bytes = base64.b64decode(ass_b64)
