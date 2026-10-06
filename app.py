@@ -31,21 +31,27 @@ SCOPES = [
 
 @st.cache_resource
 def get_gspread_client():
-    """Autentica lendo o JSON de credenciais tratando caracteres de controle."""
-    raw_json = st.secrets["gcp_service_account"]["json_data"]
-    
-    # Tratamento para remover quebras de linha cruas e desescapar a chave privada
-    try:
-        credentials_info = json.loads(raw_json, strict=False)
-    except Exception:
-        # Fallback caso haja contra-barras literais desformatadas no TOML
-        raw_json_cleaned = raw_json.replace('\n', '\\n').replace('\r', '')
-        credentials_info = json.loads(raw_json_cleaned, strict=False)
+    """Autentica lendo os Secrets do Streamlit e tratando a chave privada."""
+    # Garante a cópia do dicionário de secrets para modificação
+    if "gcp_service_account" in st.secrets:
+        creds_info = dict(st.secrets["gcp_service_account"])
+        
+        # Se os dados foram salvos como um bloco JSON sob a chave 'json_data'
+        if "json_data" in creds_info:
+            raw_json = creds_info["json_data"]
+            try:
+                creds_info = json.loads(raw_json, strict=False)
+            except Exception:
+                raw_json_cleaned = raw_json.replace('\n', '\\n').replace('\r', '')
+                creds_info = json.loads(raw_json_cleaned, strict=False)
+    else:
+        raise KeyError("A seção [gcp_service_account] não foi encontrada nos Secrets do Streamlit.")
 
-    if "private_key" in credentials_info:
-        credentials_info["private_key"] = credentials_info["private_key"].replace("\\n", "\n")
+    # Corrige a formatação das quebras de linha da private_key RSA
+    if "private_key" in creds_info:
+        creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
 
-    creds = Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
+    creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
     client = gspread.authorize(creds)
     return client
 
