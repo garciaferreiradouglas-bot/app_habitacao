@@ -31,9 +31,20 @@ SCOPES = [
 
 @st.cache_resource
 def get_gspread_client():
-    """Autentica lendo o JSON de credenciais guardado nas Secrets."""
+    """Autentica lendo o JSON de credenciais tratando caracteres de controle."""
     raw_json = st.secrets["gcp_service_account"]["json_data"]
-    credentials_info = json.loads(raw_json)
+    
+    # Tratamento para remover quebras de linha cruas e desescapar a chave privada
+    try:
+        credentials_info = json.loads(raw_json, strict=False)
+    except Exception:
+        # Fallback caso haja contra-barras literais desformatadas no TOML
+        raw_json_cleaned = raw_json.replace('\n', '\\n').replace('\r', '')
+        credentials_info = json.loads(raw_json_cleaned, strict=False)
+
+    if "private_key" in credentials_info:
+        credentials_info["private_key"] = credentials_info["private_key"].replace("\\n", "\n")
+
     creds = Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
     client = gspread.authorize(creds)
     return client
