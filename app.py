@@ -31,44 +31,25 @@ SCOPES = [
 
 @st.cache_resource
 def get_gspread_client():
-    """Autentica lendo os Secrets do Streamlit e tratando a chave privada RSA."""
+    """Autentica lendo os Secrets em formato JSON nativo do Streamlit Cloud."""
     if "gcp_service_account" not in st.secrets:
         st.error("A seção [gcp_service_account] não foi encontrada nos Secrets do Streamlit.")
         st.stop()
 
-    creds_info = dict(st.secrets["gcp_service_account"])
+    sec_data = st.secrets["gcp_service_account"]
 
-    # Tratamento caso os dados venham como string JSON empacotada
-    if "json_data" in creds_info:
-        raw_json = creds_info["json_data"]
-        try:
+    if "json_data" in sec_data:
+        raw_json = sec_data["json_data"]
+        if isinstance(raw_json, str):
             creds_info = json.loads(raw_json, strict=False)
-        except Exception:
-            raw_json_cleaned = raw_json.replace('\n', '\\n').replace('\r', '')
-            creds_info = json.loads(raw_json_cleaned, strict=False)
+        else:
+            creds_info = dict(raw_json)
+    else:
+        creds_info = dict(sec_data)
 
-    # Limpeza e formatação rigorosa da chave privada RSA
+    # Converte caracteres \n literais para quebras de linha reais exigidas pela chave RSA
     if "private_key" in creds_info:
-        pk = str(creds_info["private_key"]).strip()
-        
-        # Remove aspas extras se existirem
-        if pk.startswith('"') and pk.endswith('"'):
-            pk = pk[1:-1]
-        if pk.startswith("'") and pk.endswith("'"):
-            pk = pk[1:-1]
-        
-        # Converte \n literais para quebras de linha reais
-        pk = pk.replace("\\n", "\n")
-        
-        # Assegura o cabeçalho e rodapé limpos do formato PEM
-        if "-----BEGIN PRIVATE KEY-----" in pk and "-----END PRIVATE KEY-----" in pk:
-            core = pk.split("-----BEGIN PRIVATE KEY-----")[1].split("-----END PRIVATE KEY-----")[0]
-            core_clean = "".join(core.split())  # remove espaços e quebras extras do corpo
-            
-            # Reconstrução com quebras de linha a cada 64 caracteres (padrão PEM)
-            lines = [core_clean[i:i+64] for i in range(0, len(core_clean), 64)]
-            pk_formatted = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(lines) + "\n-----END PRIVATE KEY-----\n"
-            creds_info["private_key"] = pk_formatted
+        creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
 
     creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
     client = gspread.authorize(creds)
