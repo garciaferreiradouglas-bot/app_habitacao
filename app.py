@@ -63,51 +63,20 @@ def get_sheet():
 # --- MAPEAMENTO DINÂMICO DE MUNIÇÕES POR TIPO DE ARMA ---
 OPCOES_MUNICAO_POR_ARMA = {
     "Pistola": [
-        "9mm Luger",
-        ".380 ACP",
-        ".40 S&W",
-        ".45 ACP",
-        ".38 TPC",
-        ".22 LR",
-        ".38 Super Auto",
-        "10mm Auto",
-        "7,65mm Browning",
-        "6,35mm (.25 ACP)"
+        "9mm Luger", ".380 ACP", ".40 S&W", ".45 ACP", ".38 TPC", 
+        ".22 LR", ".38 Super Auto", "10mm Auto", "7,65mm Browning", "6,35mm (.25 ACP)"
     ],
     "Revólver": [
-        ".38 SPL",
-        ".357 Magnum",
-        ".22 LR",
-        ".32 S&W / Longo",
-        ".44 Magnum",
-        ".454 Casull",
-        ".22 WMR",
-        ".44-40 WCF"
+        ".38 SPL", ".357 Magnum", ".22 LR", ".32 S&W / Longo", 
+        ".44 Magnum", ".454 Casull", ".22 WMR", ".44-40 WCF"
     ],
     "Carabina/Fuzil": [
-        "5.56x45mm / .223 Rem",
-        ".22 LR",
-        "9mm Luger",
-        ".300 Blackout",
-        ".308 Win / 7.62x51mm",
-        ".38 SPL",
-        ".357 Magnum",
-        ".40 S&W",
-        ".380 ACP",
-        ".17 HMR",
-        "6.5 Creedmoor",
-        ".44 Magnum",
-        ".44-40 WCF",
-        ".30-06 Springfield"
+        "5.56x45mm / .223 Rem", ".22 LR", "9mm Luger", ".300 Blackout", 
+        ".308 Win / 7.62x51mm", ".38 SPL", ".357 Magnum", ".40 S&W", 
+        ".380 ACP", ".17 HMR", "6.5 Creedmoor", ".44 Magnum", ".44-40 WCF", ".30-06 Springfield"
     ],
     "Espingarda": [
-        "12 GA",
-        "20 GA",
-        "28 GA",
-        "36 GA / .410",
-        "16 GA",
-        "24 GA",
-        "32 GA"
+        "12 GA", "20 GA", "28 GA", "36 GA / .410", "16 GA", "24 GA", "32 GA"
     ]
 }
 
@@ -121,42 +90,36 @@ ATIRADORES_PADRAO = [
 def get_lista_atiradores():
     return pd.DataFrame(ATIRADORES_PADRAO)
 
-# --- CONVERTE MATRIZ DO CANVAS EM STRING BASE64 VÁLIDA ---
+# --- CONVERTE MATRIZ DO CANVAS EM BASE64 ROBUSTO ---
 def processar_imagem_canvas(img_array):
     try:
-        # Garante array em uint8
         img_uint8 = img_array.astype(np.uint8)
-        img_pil = Image.fromarray(img_uint8)
         
-        # Converte para RGB com fundo branco caso haja transparência
-        if img_pil.mode in ("RGBA", "LA") or (img_pil.mode == "P" and "transparency" in img_pil.info):
-            background = Image.new("RGB", img_pil.size, (255, 255, 255))
-            if img_pil.mode == "RGBA":
-                background.paste(img_pil, mask=img_pil.split()[3])
-            else:
-                background.paste(img_pil)
-            img_pil = background
-        else:
-            img_pil = img_pil.convert("RGB")
-
+        # Cria imagem PIL a partir do array (RGBA)
+        img_pil = Image.fromarray(img_uint8, mode="RGBA")
+        
+        # Cria fundo branco e combina com o desenho em preto
+        background = Image.new("RGB", img_pil.size, (255, 255, 255))
+        background.paste(img_pil, mask=img_pil.split()[3]) # canal Alpha como máscara
+        
         buffered = io.BytesIO()
-        img_pil.save(buffered, format="JPEG", quality=85)
+        background.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode('utf-8')
     except Exception as e:
-        st.error(f"Erro ao processar imagem: {e}")
+        st.error(f"Erro ao processar imagem da assinatura: {e}")
         return ""
 
-# --- FUNÇÃO PARA SALVAR NO GOOGLE SHEETS ---
+# --- SALVA NO GOOGLE SHEETS ---
 def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     assinatura_b64 = processar_imagem_canvas(img_array)
     
     if not assinatura_b64:
-        raise ValueError("Não foi possível gerar a assinatura digital em imagem.")
+        raise ValueError("Não foi possível processar o desenho da assinatura.")
 
     data_hora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     registro_id = str(uuid.uuid4())[:8]
 
-    # Hash SHA-256 de integridade
+    # Cálculo do Hash SHA-256
     payload_validacao = f"{data_hora_str}|{nome}|{cr}|{sigma}|{arma}|{municao}|{qtd}|{assinatura_b64[:50]}"
     hash_integridade = hashlib.sha256(payload_validacao.encode('utf-8')).hexdigest()
 
@@ -176,7 +139,7 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     sheet = get_sheet()
     sheet.append_row(linha_dados)
 
-# --- FUNÇÃO PARA CARREGAR REGISTROS DO GOOGLE SHEETS ---
+# --- CARREGA REGISTROS DA PLANILHA ---
 def carregar_habituacoes_sheets():
     try:
         sheet = get_sheet()
@@ -189,27 +152,36 @@ def carregar_habituacoes_sheets():
         st.error(f"Erro ao carregar dados do Google Sheets: {e}")
         return pd.DataFrame()
 
-# --- EXTRAIR BASE64 LIMPO ---
-def extrair_base64(valor):
-    if not valor:
-        return ""
+# --- BUSCA A COLUNA DA ASSINATURA INDEPENDENTE DO NOME ---
+def obter_valor_assinatura(row):
+    """Busca a string Base64 em qualquer coluna de assinatura existente na linha."""
+    # Nomes comuns de coluna
+    colunas_possiveis = ['assinatura_base64a', 'assinatura_base64', 'assinatura', 'Assinatura Digital']
     
-    valor_str = str(valor).strip()
+    for col in colunas_possiveis:
+        if col in row and pd.notna(row[col]) and str(row[col]).strip() != "":
+            val_str = str(row[col]).strip()
+            
+            # Se contiver prefixos de URL/Fórmula
+            if "base64," in val_str:
+                try:
+                    return val_str.split("base64,")[1].split('"')[0].split("'")[0].split(')')[0].strip()
+                except Exception:
+                    pass
+            elif len(val_str) > 100 and not val_str.startswith("http") and not val_str.startswith("="):
+                return val_str
+                
+    # Tenta pegar pela 9ª coluna (índice 8) caso a busca por nome falhe
+    try:
+        val_ind = row.iloc[8]
+        if pd.notna(val_ind) and len(str(val_ind)) > 100:
+            return str(val_ind).strip()
+    except Exception:
+        pass
 
-    if "base64," in valor_str:
-        try:
-            parte_b64 = valor_str.split("base64,")[1]
-            parte_b64 = parte_b64.split('"')[0].split("'")[0].split(')')[0]
-            return parte_b64.strip()
-        except Exception:
-            return ""
+    return ""
 
-    if valor_str.startswith("#") or "VALUE" in valor_str or len(valor_str) < 50:
-        return ""
-
-    return valor_str
-
-# --- FUNÇÃO PARA GERAR EXCEL COM ASSINATURAS ---
+# --- EXPORTAÇÃO EXCEL COM IMAGENS DAS ASSINATURAS ---
 def gerar_excel_com_assinaturas(df_hab):
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -223,21 +195,20 @@ def gerar_excel_com_assinaturas(df_hab):
 
     ws.column_dimensions['I'].width = 25
 
-    for row_idx, row in enumerate(df_hab.itertuples(), start=2):
-        ws.cell(row=row_idx, column=1, value=getattr(row, 'id', ''))
-        ws.cell(row=row_idx, column=2, value=getattr(row, 'data_hora', ''))
-        ws.cell(row=row_idx, column=3, value=getattr(row, 'nome_atirador', ''))
-        ws.cell(row=row_idx, column=4, value=getattr(row, 'cr_atirador', ''))
-        ws.cell(row=row_idx, column=5, value=getattr(row, 'sigma_atirador', ''))
-        ws.cell(row=row_idx, column=6, value=getattr(row, 'tipo_arma', ''))
-        ws.cell(row=row_idx, column=7, value=getattr(row, 'tipo_municao', ''))
-        ws.cell(row=row_idx, column=8, value=getattr(row, 'qtd_municao', ''))
-        ws.cell(row=row_idx, column=10, value=getattr(row, 'hash_integridade', ''))
+    for row_idx, (_, row) in enumerate(df_hab.iterrows(), start=2):
+        ws.cell(row=row_idx, column=1, value=row.get('id', ''))
+        ws.cell(row=row_idx, column=2, value=row.get('data_hora', ''))
+        ws.cell(row=row_idx, column=3, value=row.get('nome_atirador', ''))
+        ws.cell(row=row_idx, column=4, value=row.get('cr_atirador', ''))
+        ws.cell(row=row_idx, column=5, value=row.get('sigma_atirador', ''))
+        ws.cell(row=row_idx, column=6, value=row.get('tipo_arma', ''))
+        ws.cell(row=row_idx, column=7, value=row.get('tipo_municao', ''))
+        ws.cell(row=row_idx, column=8, value=row.get('qtd_municao', ''))
+        ws.cell(row=row_idx, column=10, value=row.get('hash_integridade', ''))
 
-        ws.row_dimensions[row_idx].height = 50
+        ws.row_dimensions[row_idx].height = 55
 
-        bruto_assinatura = getattr(row, 'assinatura_base64', '')
-        assinatura_b64 = extrair_base64(bruto_assinatura)
+        assinatura_b64 = obter_valor_assinatura(row)
 
         if assinatura_b64:
             try:
@@ -257,11 +228,11 @@ def gerar_excel_com_assinaturas(df_hab):
     buffer.seek(0)
     return buffer.getvalue()
 
-# --- INICIALIZAÇÃO DO ESTADO ---
+# --- ESTADO INICIAL ---
 if "canvas_key" not in st.session_state:
     st.session_state["canvas_key"] = 0
 
-# --- NAVEGAÇÃO ---
+# --- ABAS DE NAVEGAÇÃO ---
 aba = st.radio("Selecione o Modo:", ["🎯 Registro de Habituação (Atirador)", "📊 Painel Admin / Exportar"], horizontal=True)
 
 if aba == "🎯 Registro de Habituação (Atirador)":
@@ -269,28 +240,20 @@ if aba == "🎯 Registro de Habituação (Atirador)":
     st.write("Preencha os dados da sessão de tiro e assine no campo abaixo.")
 
     df_atiradores = get_lista_atiradores()
-    
     termo_busca = st.text_input("🔍 Digite o nome ou CR para filtrar:", placeholder="Ex: Carlos ou 9876...")
     
     if termo_busca:
-        df_filtrado = df_atiradores[
-            df_atiradores['rotulo'].str.contains(termo_busca, case=False, na=False)
-        ]
+        df_filtrado = df_atiradores[df_atiradores['rotulo'].str.contains(termo_busca, case=False, na=False)]
     else:
         df_filtrado = df_atiradores
 
     lista_opcoes = df_filtrado['rotulo'].tolist()
 
     if not lista_opcoes:
-        st.warning("Nenhum atirador pré-cadastrado encontrado com esse termo. Preencha manualmente abaixo:")
         nome_atirador = st.text_input("Nome do Atirador:")
         cr_atirador = st.text_input("CR do Atirador:")
     else:
-        opcao_selecionada = st.selectbox(
-            "Selecione seu Nome / CR:",
-            options=lista_opcoes,
-            index=0
-        )
+        opcao_selecionada = st.selectbox("Selecione seu Nome / CR:", options=lista_opcoes, index=0)
         row_atirador = df_filtrado[df_filtrado['rotulo'] == opcao_selecionada].iloc[0]
         nome_atirador = row_atirador['nome']
         cr_atirador = row_atirador['cr']
@@ -302,10 +265,9 @@ if aba == "🎯 Registro de Habituação (Atirador)":
         with col1:
             tipo_arma = st.selectbox("Tipo de Arma:", list(OPCOES_MUNICAO_POR_ARMA.keys()))
         with col2:
-            municoes_disponiveis = OPCOES_MUNICAO_POR_ARMA[tipo_arma]
-            tipo_municao = st.selectbox("Tipo/Calibre de Munição:", municoes_disponiveis)
+            tipo_municao = st.selectbox("Tipo/Calibre de Munição:", OPCOES_MUNICAO_POR_ARMA[tipo_arma])
 
-        qtd_input = st.text_input("Quantidade de Munição Utilizada:", value="50", placeholder="Ex: 50, 100, 250...")
+        qtd_input = st.text_input("Quantidade de Munição Utilizada:", value="50")
 
         st.subheader("🖋️ Assinatura Digital")
         st.caption("Assine dentro da caixa abaixo:")
@@ -322,11 +284,9 @@ if aba == "🎯 Registro de Habituação (Atirador)":
             key=f"canvas_assinatura_{st.session_state['canvas_key']}"
         )
 
-        col_btn1, col_btn2 = st.columns([1, 1])
-        with col_btn1:
-            if st.button("🧹 Limpar Assinatura", use_container_width=True):
-                st.session_state["canvas_key"] += 1
-                st.rerun()
+        if st.button("🧹 Limpar Assinatura"):
+            st.session_state["canvas_key"] += 1
+            st.rerun()
 
         st.info("📌 Registro com carimbo de tempo e hash criptográfico de validação (Lei 14.063/2020).")
 
@@ -337,48 +297,34 @@ if aba == "🎯 Registro de Habituação (Atirador)":
                     st.error("A quantidade de munição deve ser maior que zero.")
                     st.stop()
             except ValueError:
-                st.error("Por favor, informe um número válido para a quantidade de munição.")
+                st.error("Por favor, informe um número válido para a quantidade.")
                 st.stop()
 
             img_data = canvas_result.image_data if canvas_result is not None else None
 
+            # Validação do desenho
             assinatura_valida = False
             if img_data is not None and isinstance(img_data, np.ndarray):
                 if img_data.shape[2] == 4:
                     alpha = img_data[:, :, 3]
                     if np.any(alpha > 0):
                         assinatura_valida = True
-                elif np.any(img_data < 250):
-                    assinatura_valida = True
 
             if assinatura_valida:
                 with st.spinner("Gravando no Google Sheets..."):
                     try:
                         salvar_habituação_sheets(
-                            nome_atirador,
-                            cr_atirador,
-                            sigma_atirador,
-                            tipo_arma,
-                            tipo_municao,
-                            qtd_municao,
-                            img_data
+                            nome_atirador, cr_atirador, sigma_atirador,
+                            tipo_arma, tipo_municao, qtd_municao, img_data
                         )
                         st.session_state["canvas_key"] += 1
-                        
-                        st.markdown("""
-                            <div style="text-align: center; padding: 20px; background-color: #d4edda; border-radius: 10px; border: 2px solid #28a745;">
-                                <h1 style="color: #155724; margin: 0;">💥 🎯 💥</h1>
-                                <h2 style="color: #155724; margin-top: 10px;">HABITUALIDADE CONCLUÍDA!</h2>
-                                <p style="color: #155724; font-size: 18px;">Registro salvo com sucesso no Google Sheets.</p>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        time.sleep(5)
+                        st.success("HABITUALIDADE REGISTRADA COM SUCESSO!")
+                        time.sleep(3)
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Erro ao salvar registro no Google Sheets: {e}")
+                        st.error(f"Erro ao salvar: {e}")
             else:
-                st.error("Por favor, faça a assinatura antes de salvar.")
+                st.error("Por favor, assine o campo de assinatura antes de salvar.")
 
 else:
     st.title("📊 Painel Administrativo")
@@ -388,13 +334,11 @@ else:
         df_hab = carregar_habituacoes_sheets()
 
     if df_hab.empty:
-        st.info("Nenhuma habituação registrada até o momento no Google Sheets.")
+        st.info("Nenhuma habituação registrada até o momento.")
     else:
-        if 'assinatura_base64' in df_hab.columns:
-            df_exibicao = df_hab.drop(columns=['assinatura_base64'])
-        else:
-            df_exibicao = df_hab
-
+        # Oculta colunas longas da tabela de visão geral
+        cols_ocultar = [c for c in df_hab.columns if 'assinatura' in c.lower()]
+        df_exibicao = df_hab.drop(columns=cols_ocultar, errors='ignore')
         st.dataframe(df_exibicao, use_container_width=True)
 
         st.subheader("🔍 Visualizar Registros e Assinaturas")
@@ -417,16 +361,15 @@ else:
                 
                 with col_img:
                     st.markdown("**Assinatura Capturada:**")
-                    bruto_ass = row.get('assinatura_base64', '')
-                    ass_b64 = extrair_base64(bruto_ass)
+                    ass_b64 = obter_valor_assinatura(row)
                     if ass_b64:
                         try:
                             img_bytes = base64.b64decode(ass_b64)
                             st.image(img_bytes, width=280)
                         except Exception:
-                            st.error("Erro ao decodificar imagem da assinatura.")
+                            st.error("Erro ao converter imagem Base64.")
                     else:
-                        st.caption("Sem imagem de assinatura registrada.")
+                        st.caption("Sem imagem de assinatura válida nesta linha.")
 
         st.markdown("---")
         
