@@ -22,9 +22,13 @@ import os
 st.set_page_config(
     page_title="Habituação de Atiradores",
     page_icon="🎯",
-    layout="centered",
+    layout="wide",  # Layout expandido para acomodar os logos laterais
     initial_sidebar_state="collapsed"
 )
+
+# --- NOMES DOS FICHEIROS DAS IMAGENS ---
+PATH_LOGO_ESQUERDA = "Logo_Dominio-removebg-preview.jpg"
+PATH_LOGO_DIREITA = "LOGO_CCTU-removebg-preview.png"
 
 # --- AUTENTICAÇÃO E CONEXÃO COM GOOGLE SHEETS ---
 SCOPES = [
@@ -297,256 +301,271 @@ if "form_version" not in st.session_state:
 
 v = st.session_state["form_version"]
 
-# --- ABAS DE NAVEGAÇÃO ---
-aba = st.radio("Selecione o Modo:", ["🎯 Registro de Habituação (Atirador)", "📊 Painel Admin / Exportar"], horizontal=True)
+# --- DIVISÃO EM 3 COLUNAS PARA EXIBIR OS LOGOS NAS LATERAIS ---
+col_esquerda, col_centro, col_direita = st.columns([1, 2, 1])
 
-if aba == "🎯 Registro de Habituação (Atirador)":
-    st.title("🎯 Registro de Habituação")
-    st.write("Preencha os dados da sessão de tiro e assine no campo abaixo.")
+with col_esquerda:
+    st.write("")
+    if os.path.exists(PATH_LOGO_ESQUERDA):
+        st.image(PATH_LOGO_ESQUERDA, use_container_width=True)
+    elif os.path.exists("Logo_Dominio-removebg-preview.png"):
+        st.image("Logo_Dominio-removebg-preview.png", use_container_width=True)
 
-    df_hab = carregar_habituacoes_sheets()
-    lista_cadastrados = obter_atiradores_existentes(df_hab)
+with col_direita:
+    st.write("")
+    if os.path.exists(PATH_LOGO_DIREITA):
+        st.image(PATH_LOGO_DIREITA, use_container_width=True)
+    elif os.path.exists("LOGO_CCTU-removebg-preview.jpg"):
+        st.image("LOGO_CCTU-removebg-preview.jpg", use_container_width=True)
 
-    # --- BUSCA E SELEÇÃO DE CADASTRADOS ---
-    TEXTO_PADRAO_SELECT = "-- Selecione um Atirador Cadastrado --"
-    opcoes_select = [TEXTO_PADRAO_SELECT] + [a['rotulo'] for a in lista_cadastrados]
-    opcao_selecionada = st.selectbox("🔍 Selecione seu Cadastro:", options=opcoes_select, key=f"select_atirador_{v}")
+with col_centro:
+    # --- ABAS DE NAVEGAÇÃO ---
+    aba = st.radio("Selecione o Modo:", ["🎯 Registro de Habituação (Atirador)", "📊 Painel Admin / Exportar"], horizontal=True)
 
-    is_novo_cadastro = (opcao_selecionada == TEXTO_PADRAO_SELECT)
+    if aba == "🎯 Registro de Habituação (Atirador)":
+        st.title("🎯 Registro de Habituação")
+        st.write("Preencha os dados da sessão de tiro e assine no campo abaixo.")
 
-    if is_novo_cadastro:
-        nome_input = st.text_input("Nome Completo do Atirador:", placeholder="Informe o nome completo para cadastrar", key=f"input_nome_{v}")
-        cr_valor = ""
-        sigma_valor = ""
-    else:
-        atirador_obj = next(a for a in lista_cadastrados if a['rotulo'] == opcao_selecionada)
-        nome_input = atirador_obj['nome']
-        cr_valor = atirador_obj['cr']
-        sigma_valor = atirador_obj['sigma']
-        
-        st.text_input("Nome Completo do Atirador:", value=nome_input, disabled=True, help="Atirador selecionado na busca acima.", key=f"input_nome_dis_{v}")
-
-    col_sigma, col_cr = st.columns(2)
-    with col_sigma:
-        sigma_input = st.text_input(
-            "Número do SIGMA:", 
-            value=sigma_valor if not is_novo_cadastro else "", 
-            placeholder="Informe o número do SIGMA", 
-            key=f"input_sigma_{v}_{opcao_selecionada}"
-        )
-    with col_cr:
-        cr_input = st.text_input(
-            "Número do CR:", 
-            value=cr_valor if not is_novo_cadastro else "", 
-            placeholder="Informe o número do CR", 
-            disabled=not is_novo_cadastro, 
-            key=f"input_cr_{v}_{opcao_selecionada}"
-        )
-
-    col1, col2 = st.columns(2)
-    with col1:
-        tipo_arma = st.selectbox("Tipo de Arma:", list(OPCOES_MUNICAO_POR_ARMA.keys()), key=f"select_tipo_arma_{v}")
-    with col2:
-        tipo_municao = st.selectbox("Tipo/Calibre de Munição:", OPCOES_MUNICAO_POR_ARMA[tipo_arma], key=f"select_tipo_municao_{v}")
-
-    # CAMPO DE QUANTIDADE DE MUNIÇÃO INICIA EM BRANCO (SEM VALOR PADRÃO 50)
-    qtd_input = st.text_input("Quantidade de Munição Utilizada:", placeholder="Informe a quantidade utilizada", key=f"input_qtd_{v}")
-
-    st.subheader("🖋️ Assinatura Digital")
-    st.caption("Assine dentro da caixa abaixo:")
-
-    canvas_result = st_canvas(
-        fill_color="rgba(255, 255, 255, 0)",
-        stroke_width=3,
-        stroke_color="#000000",
-        background_color="#FFFFFF",
-        height=200,
-        drawing_mode="freedraw",
-        update_streamlit=True,
-        return_image_data=True,
-        key=f"canvas_assinatura_{st.session_state['canvas_key']}"
-    )
-
-    if st.button("🧹 Limpar Assinatura"):
-        st.session_state["canvas_key"] += 1
-        st.rerun()
-
-    st.info("📌 Registro com carimbo de tempo e hash criptográfico de validação (Lei 14.063/2020).")
-
-    if st.button("✅ Registrar Habituação", type="primary", use_container_width=True):
-        nome_final = nome_input.strip().upper() if nome_input else ""
-        cr_final = cr_input.strip().upper() if cr_input else ""
-        sigma_final = sigma_input.strip().upper() if sigma_input else ""
-
-        # --- VALIDAÇÕES DE CAMPOS OBRIGATÓRIOS ---
-        if not nome_final:
-            st.error("⚠️ Preenchimento obrigatório: Por favor, informe o Nome do Atirador.")
-            st.stop()
-
-        if not cr_final:
-            st.error("⚠️ Preenchimento obrigatório: Por favor, informe o CR do Atirador.")
-            st.stop()
-
-        if not sigma_final:
-            st.error("⚠️ Preenchimento obrigatório: Por favor, informe o número do SIGMA.")
-            st.stop()
-
-        # VALIDAÇÃO DE QUANTIDADE (INÍCIO EM BRANCO / BLOQUEIA SE VAZIO OU INVÁLIDO)
-        if not qtd_input or not qtd_input.strip():
-            st.error("⚠️ Preenchimento obrigatório: Por favor, informe a quantidade de munição utilizada.")
-            st.stop()
-
-        try:
-            qtd_municao = int(qtd_input.strip())
-            if qtd_municao <= 0:
-                st.error("⚠️ A quantidade de munição deve ser maior que zero.")
-                st.stop()
-        except ValueError:
-            st.error("⚠️ Por favor, informe um número válido para a quantidade de munição.")
-            st.stop()
-
-        # --- VERIFICAÇÃO DE DUPLICIDADE EM CASO DE NOVO CADASTRO ---
-        if is_novo_cadastro and lista_cadastrados:
-            nomes_existentes = [a['nome'].upper() for a in lista_cadastrados]
-            crs_existentes = [a['cr'].upper() for a in lista_cadastrados if a['cr']]
-
-            if nome_final in nomes_existentes:
-                st.error(f"⚠️ Atirador já cadastrado! O nome '{nome_final}' já existe no sistema. Por favor, selecione-o no campo 'Selecione seu Cadastro'.")
-                st.stop()
-
-            if cr_final in crs_existentes:
-                st.error(f"⚠️ CR já cadastrado! O CR '{cr_final}' já pertence a outro atirador. Por favor, selecione seu cadastro acima.")
-                st.stop()
-
-        img_data = canvas_result.image_data if canvas_result is not None else None
-        assinatura_valida = False
-        if img_data is not None and isinstance(img_data, np.ndarray):
-            if img_data.shape[2] == 4:
-                alpha = img_data[:, :, 3]
-                if np.any(alpha > 0):
-                    assinatura_valida = True
-
-        if not assinatura_valida:
-            st.error("⚠️ Preenchimento obrigatório: Por favor, assine no campo de assinatura antes de salvar.")
-            st.stop()
-
-        # GRAVAÇÃO E RESET COMPLETO DOS CAMPOS
-        with st.spinner("Gravando no Google Sheets..."):
-            try:
-                salvar_habituação_sheets(
-                    nome_final,
-                    cr_final,
-                    sigma_final,
-                    tipo_arma,
-                    tipo_municao,
-                    qtd_municao,
-                    img_data
-                )
-                
-                # INCREMENTA A VERSÃO DO FORMULÁRIO E A CHAVE DO CANVAS PARA RESETAR TUDO LIMPO
-                st.session_state["canvas_key"] += 1
-                st.session_state["form_version"] += 1
-                
-                st.success("HABITUALIDADE REGISTRADA COM SUCESSO!")
-                time.sleep(2)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
-
-else:
-    # --- PAINEL ADMINISTRATIVO COM FILTRO ---
-    col_titulo, col_filtro = st.columns([1.5, 1])
-
-    with col_titulo:
-        st.title("📊 Painel Administrativo")
-        
-    with st.spinner("Buscando registros da nuvem..."):
         df_hab = carregar_habituacoes_sheets()
+        lista_cadastrados = obter_atiradores_existentes(df_hab)
 
-    with col_filtro:
-        st.write("")
-        if not df_hab.empty and 'nome_atirador' in df_hab.columns:
-            lista_clientes = ["Todos os Atiradores"] + sorted([x for x in df_hab['nome_atirador'].unique() if x])
+        # --- BUSCA E SELEÇÃO DE CADASTRADOS ---
+        TEXTO_PADRAO_SELECT = "-- Selecione um Atirador Cadastrado --"
+        opcoes_select = [TEXTO_PADRAO_SELECT] + [a['rotulo'] for a in lista_cadastrados]
+        opcao_selecionada = st.selectbox("🔍 Selecione seu Cadastro:", options=opcoes_select, key=f"select_atirador_{v}")
+
+        is_novo_cadastro = (opcao_selecionada == TEXTO_PADRAO_SELECT)
+
+        if is_novo_cadastro:
+            nome_input = st.text_input("Nome Completo do Atirador:", placeholder="Informe o nome completo para cadastrar", key=f"input_nome_{v}")
+            cr_valor = ""
+            sigma_valor = ""
         else:
-            lista_clientes = ["Todos os Atiradores"]
+            atirador_obj = next(a for a in lista_cadastrados if a['rotulo'] == opcao_selecionada)
+            nome_input = atirador_obj['nome']
+            cr_valor = atirador_obj['cr']
+            sigma_valor = atirador_obj['sigma']
             
-        cliente_selecionado = st.selectbox("🎯 Filtrar por Atirador:", options=lista_clientes)
+            st.text_input("Nome Completo do Atirador:", value=nome_input, disabled=True, help="Atirador selecionado na busca acima.", key=f"input_nome_dis_{v}")
 
-    st.write("Visualização de registros salvos no Google Sheets e exportação em Excel/PDF.")
-
-    if df_hab.empty:
-        st.info("Nenhuma habituação registrada até o momento.")
-    else:
-        if cliente_selecionado != "Todos os Atiradores":
-            df_exibicao_base = df_hab[df_hab['nome_atirador'] == cliente_selecionado]
-        else:
-            df_exibicao_base = df_hab.copy()
-
-        cols_ocultar = [c for c in df_exibicao_base.columns if 'assinatura' in c.lower()]
-        df_exibicao = df_exibicao_base.drop(columns=cols_ocultar, errors='ignore')
-        st.dataframe(df_exibicao, use_container_width=True)
-
-        st.subheader("🔍 Visualizar Registros e Assinaturas")
-        
-        for idx, row in df_exibicao_base.iterrows():
-            nome = row.get('nome_atirador', '')
-            dt = row.get('data_hora', '')
-            reg_id = row.get('id', idx)
-            
-            with st.expander(f"ID #{reg_id} - {nome} ({dt})"):
-                col_info, col_img = st.columns([1, 1])
-                
-                with col_info:
-                    st.markdown(f"**Atirador:** {row.get('nome_atirador', '')}")
-                    st.markdown(f"**CR:** {row.get('cr_atirador', '')}")
-                    st.markdown(f"**SIGMA:** {row.get('sigma_atirador', 'N/A')}")
-                    st.markdown(f"**Arma/Calibre:** {row.get('tipo_arma', '')} - {row.get('tipo_municao', '')}")
-                    st.markdown(f"**Qtd. Munição:** {row.get('qtd_municao', '')}")
-                    st.markdown(f"**Hash SHA-256:** `{row.get('hash_integridade', '')}`")
-                
-                with col_img:
-                    st.markdown("**Assinatura Capturada:**")
-                    ass_b64 = obter_valor_assinatura(row)
-                    if ass_b64:
-                        try:
-                            img_bytes = base64.b64decode(ass_b64)
-                            st.image(img_bytes, width=280)
-                        except Exception:
-                            st.error("Erro ao converter imagem Base64.")
-                    else:
-                        st.caption("Sem imagem de assinatura válida nesta linha.")
-
-        st.markdown("---")
-        
-        col_btn_excel, col_btn_pdf = st.columns([1, 1])
-
-        with col_btn_excel:
-            excel_data = gerar_excel_com_assinaturas(df_exibicao_base)
-            
-            st.download_button(
-                label="📥 Baixar Planilha Completa com Assinaturas (Excel)",
-                data=excel_data,
-                file_name=f"habituacoes_com_assinaturas_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary",
-                use_container_width=True
+        col_sigma, col_cr = st.columns(2)
+        with col_sigma:
+            sigma_input = st.text_input(
+                "Número do SIGMA:", 
+                value=sigma_valor if not is_novo_cadastro else "", 
+                placeholder="Informe o número do SIGMA", 
+                key=f"input_sigma_{v}_{opcao_selecionada}"
+            )
+        with col_cr:
+            cr_input = st.text_input(
+                "Número do CR:", 
+                value=cr_valor if not is_novo_cadastro else "", 
+                placeholder="Informe o número do CR", 
+                disabled=not is_novo_cadastro, 
+                key=f"input_cr_{v}_{opcao_selecionada}"
             )
 
-        with col_btn_pdf:
-            if cliente_selecionado != "Todos os Atiradores" and not df_exibicao_base.empty:
-                pdf_data = gerar_pdf_relatorio_cliente(df_exibicao_base, cliente_selecionado)
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_arma = st.selectbox("Tipo de Arma:", list(OPCOES_MUNICAO_POR_ARMA.keys()), key=f"select_tipo_arma_{v}")
+        with col2:
+            tipo_municao = st.selectbox("Tipo/Calibre de Munição:", OPCOES_MUNICAO_POR_ARMA[tipo_arma], key=f"select_tipo_municao_{v}")
+
+        qtd_input = st.text_input("Quantidade de Munição Utilizada:", placeholder="Informe a quantidade utilizada", key=f"input_qtd_{v}")
+
+        st.subheader("🖋️ Assinatura Digital")
+        st.caption("Assine dentro da caixa abaixo:")
+
+        canvas_result = st_canvas(
+            fill_color="rgba(255, 255, 255, 0)",
+            stroke_width=3,
+            stroke_color="#000000",
+            background_color="#FFFFFF",
+            height=200,
+            drawing_mode="freedraw",
+            update_streamlit=True,
+            return_image_data=True,
+            key=f"canvas_assinatura_{st.session_state['canvas_key']}"
+        )
+
+        if st.button("🧹 Limpar Assinatura"):
+            st.session_state["canvas_key"] += 1
+            st.rerun()
+
+        st.info("📌 Registro com carimbo de tempo e hash criptográfico de validação (Lei 14.063/2020).")
+
+        if st.button("✅ Registrar Habituação", type="primary", use_container_width=True):
+            nome_final = nome_input.strip().upper() if nome_input else ""
+            cr_final = cr_input.strip().upper() if cr_input else ""
+            sigma_final = sigma_input.strip().upper() if sigma_input else ""
+
+            # --- VALIDAÇÕES DE CAMPOS OBRIGATÓRIOS ---
+            if not nome_final:
+                st.error("⚠️ Preenchimento obrigatório: Por favor, informe o Nome do Atirador.")
+                st.stop()
+
+            if not cr_final:
+                st.error("⚠️ Preenchimento obrigatório: Por favor, informe o CR do Atirador.")
+                st.stop()
+
+            if not sigma_final:
+                st.error("⚠️ Preenchimento obrigatório: Por favor, informe o número do SIGMA.")
+                st.stop()
+
+            if not qtd_input or not qtd_input.strip():
+                st.error("⚠️ Preenchimento obrigatório: Por favor, informe a quantidade de munição utilizada.")
+                st.stop()
+
+            try:
+                qtd_municao = int(qtd_input.strip())
+                if qtd_municao <= 0:
+                    st.error("⚠️ A quantidade de munição deve ser maior que zero.")
+                    st.stop()
+            except ValueError:
+                st.error("⚠️ Por favor, informe um número válido para a quantidade de munição.")
+                st.stop()
+
+            # --- VERIFICAÇÃO DE DUPLICIDADE EM CASO DE NOVO CADASTRO ---
+            if is_novo_cadastro and lista_cadastrados:
+                nomes_existentes = [a['nome'].upper() for a in lista_cadastrados]
+                crs_existentes = [a['cr'].upper() for a in lista_cadastrados if a['cr']]
+
+                if nome_final in nomes_existentes:
+                    st.error(f"⚠️ Atirador já cadastrado! O nome '{nome_final}' já existe no sistema. Por favor, selecione-o no campo 'Selecione seu Cadastro'.")
+                    st.stop()
+
+                if cr_final in crs_existentes:
+                    st.error(f"⚠️ CR já cadastrado! O CR '{cr_final}' já pertence a outro atirador. Por favor, selecione seu cadastro acima.")
+                    st.stop()
+
+            img_data = canvas_result.image_data if canvas_result is not None else None
+            assinatura_valida = False
+            if img_data is not None and isinstance(img_data, np.ndarray):
+                if img_data.shape[2] == 4:
+                    alpha = img_data[:, :, 3]
+                    if np.any(alpha > 0):
+                        assinatura_valida = True
+
+            if not assinatura_valida:
+                st.error("⚠️ Preenchimento obrigatório: Por favor, assine no campo de assinatura antes de salvar.")
+                st.stop()
+
+            # GRAVAÇÃO E RESET COMPLETO DOS CAMPOS
+            with st.spinner("Gravando no Google Sheets..."):
+                try:
+                    salvar_habituação_sheets(
+                        nome_final,
+                        cr_final,
+                        sigma_final,
+                        tipo_arma,
+                        tipo_municao,
+                        qtd_municao,
+                        img_data
+                    )
+                    
+                    st.session_state["canvas_key"] += 1
+                    st.session_state["form_version"] += 1
+                    
+                    st.success("HABITUALIDADE REGISTRADA COM SUCESSO!")
+                    time.sleep(2)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+    else:
+        # --- PAINEL ADMINISTRATIVO COM FILTRO ---
+        col_titulo, col_filtro = st.columns([1.5, 1])
+
+        with col_titulo:
+            st.title("📊 Painel Administrativo")
+            
+        with st.spinner("Buscando registros da nuvem..."):
+            df_hab = carregar_habituacoes_sheets()
+
+        with col_filtro:
+            st.write("")
+            if not df_hab.empty and 'nome_atirador' in df_hab.columns:
+                lista_clientes = ["Todos os Atiradores"] + sorted([x for x in df_hab['nome_atirador'].unique() if x])
+            else:
+                lista_clientes = ["Todos os Atiradores"]
+                
+            cliente_selecionado = st.selectbox("🎯 Filtrar por Atirador:", options=lista_clientes)
+
+        st.write("Visualização de registros salvos no Google Sheets e exportação em Excel/PDF.")
+
+        if df_hab.empty:
+            st.info("Nenhuma habituação registrada até o momento.")
+        else:
+            if cliente_selecionado != "Todos os Atiradores":
+                df_exibicao_base = df_hab[df_hab['nome_atirador'] == cliente_selecionado]
+            else:
+                df_exibicao_base = df_hab.copy()
+
+            cols_ocultar = [c for c in df_exibicao_base.columns if 'assinatura' in c.lower()]
+            df_exibicao = df_exibicao_base.drop(columns=cols_ocultar, errors='ignore')
+            st.dataframe(df_exibicao, use_container_width=True)
+
+            st.subheader("🔍 Visualizar Registros e Assinaturas")
+            
+            for idx, row in df_exibicao_base.iterrows():
+                nome = row.get('nome_atirador', '')
+                dt = row.get('data_hora', '')
+                reg_id = row.get('id', idx)
+                
+                with st.expander(f"ID #{reg_id} - {nome} ({dt})"):
+                    col_info, col_img = st.columns([1, 1])
+                    
+                    with col_info:
+                        st.markdown(f"**Atirador:** {row.get('nome_atirador', '')}")
+                        st.markdown(f"**CR:** {row.get('cr_atirador', '')}")
+                        st.markdown(f"**SIGMA:** {row.get('sigma_atirador', 'N/A')}")
+                        st.markdown(f"**Arma/Calibre:** {row.get('tipo_arma', '')} - {row.get('tipo_municao', '')}")
+                        st.markdown(f"**Qtd. Munição:** {row.get('qtd_municao', '')}")
+                        st.markdown(f"**Hash SHA-256:** `{row.get('hash_integridade', '')}`")
+                    
+                    with col_img:
+                        st.markdown("**Assinatura Capturada:**")
+                        ass_b64 = obter_valor_assinatura(row)
+                        if ass_b64:
+                            try:
+                                img_bytes = base64.b64decode(ass_b64)
+                                st.image(img_bytes, width=280)
+                            except Exception:
+                                st.error("Erro ao converter imagem Base64.")
+                        else:
+                            st.caption("Sem imagem de assinatura válida nesta linha.")
+
+            st.markdown("---")
+            
+            col_btn_excel, col_btn_pdf = st.columns([1, 1])
+
+            with col_btn_excel:
+                excel_data = gerar_excel_com_assinaturas(df_exibicao_base)
                 
                 st.download_button(
-                    label=f"📄 Baixar Relatório PDF ({cliente_selecionado})",
-                    data=pdf_data,
-                    file_name=f"relatorio_habituação_{cliente_selecionado.replace(' ', '_')}.pdf",
-                    mime="application/pdf",
+                    label="📥 Baixar Planilha Completa com Assinaturas (Excel)",
+                    data=excel_data,
+                    file_name=f"habituacoes_com_assinaturas_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary",
                     use_container_width=True
                 )
-            else:
-                st.button(
-                    "📄 Selecione um Atirador para PDF",
-                    disabled=True,
-                    use_container_width=True,
-                    help="Selecione um atirador específico no filtro do topo para gerar o relatório em PDF."
-                )
+
+            with col_btn_pdf:
+                if cliente_selecionado != "Todos os Atiradores" and not df_exibicao_base.empty:
+                    pdf_data = gerar_pdf_relatorio_cliente(df_exibicao_base, cliente_selecionado)
+                    
+                    st.download_button(
+                        label=f"📄 Baixar Relatório PDF ({cliente_selecionado})",
+                        data=pdf_data,
+                        file_name=f"relatorio_habituação_{cliente_selecionado.replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                else:
+                    st.button(
+                        "📄 Selecione um Atirador para PDF",
+                        disabled=True,
+                        use_container_width=True,
+                        help="Selecione um atirador específico no filtro do topo para gerar o relatório em PDF."
+                    )
