@@ -561,7 +561,7 @@ with col_centro:
     st.markdown("---")
     st.markdown(
         "<div style='text-align: center; color: #777777; font-size: 13px; margin-top: 10px;'>"
-        "💻 <b>Desenvolvido por Rodrigo H Neves</b> &copy; 2026 | Sistema de Habituação de Atiradores"
+        "💻 <b>Desenvolvido por RODRIGO HENRIQUE NEVES</b> &copy; 2026 | Sistema de Habituação de Atiradores"
         "</div>",
         unsafe_allow_html=True
     )
