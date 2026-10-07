@@ -158,10 +158,15 @@ def obter_atiradores_existentes(df_hab):
             if 'cr_atirador' in group.columns and not group['cr_atirador'].dropna().empty:
                 cr_val = str(group['cr_atirador'].dropna().iloc[-1]).strip().upper()
             
+            sigma_val = ""
+            if 'sigma_atirador' in group.columns and not group['sigma_atirador'].dropna().empty:
+                sigma_val = str(group['sigma_atirador'].dropna().iloc[-1]).strip().upper()
+
             label = f"{nome_str} - CR: {cr_val}" if cr_val else nome_str
             atiradores.append({
                 "nome": nome_str,
                 "cr": cr_val,
+                "sigma": sigma_val,
                 "rotulo": label
             })
             
@@ -306,24 +311,41 @@ if aba == "🎯 Registro de Habituação (Atirador)":
     df_hab = carregar_habituacoes_sheets()
     lista_cadastrados = obter_atiradores_existentes(df_hab)
 
-    opcoes_select = ["➕ Cadastrar Novo Atirador"] + [a['rotulo'] for a in lista_cadastrados]
-    
-    opcao_selecionada = st.selectbox("Selecione seu Nome / CR:", options=opcoes_select, key="select_atirador")
+    # --- CAMPO DE BUSCA E SELEÇÃO DE CADASTRADOS ---
+    opcoes_select = ["➕ Novo Cadastro (Preencher abaixo)"] + [a['rotulo'] for a in lista_cadastrados]
+    opcao_selecionada = st.selectbox("🔍 Selecionar Atirador Cadastrado:", options=opcoes_select, key="select_atirador")
 
-    if opcao_selecionada == "➕ Cadastrar Novo Atirador":
-        nome_input = st.text_input("Nome Completo do Atirador:", placeholder="Informe o nome completo", key="input_nome_novo")
-        cr_padrao = st.session_state["input_cr"]
+    is_novo_cadastro = (opcao_selecionada == "➕ Novo Cadastro (Preencher abaixo)")
+
+    if is_novo_cadastro:
+        nome_input = st.text_input("➕ Cadastrar Novo Atirador (Nome Completo):", placeholder="Informe o nome completo para cadastrar", key="input_nome_novo")
+        cr_valor = st.session_state["input_cr"]
+        sigma_valor = st.session_state["input_sigma"]
     else:
         atirador_obj = next(a for a in lista_cadastrados if a['rotulo'] == opcao_selecionada)
         nome_input = atirador_obj['nome']
-        st.info(f"Atirador Selecionado: **{nome_input}**")
-        cr_padrao = atirador_obj['cr']
+        cr_valor = atirador_obj['cr']
+        sigma_valor = atirador_obj['sigma']
+        
+        st.text_input("➕ Cadastrar Novo Atirador (Nome Completo):", value=nome_input, disabled=True, help="Atirador já cadastrado selecionado na busca acima.")
 
     col_sigma, col_cr = st.columns(2)
     with col_sigma:
-        sigma_input = st.text_input("Número do SIGMA:", placeholder="Informe o número do SIGMA", key="input_sigma")
+        # SIGMA SEMPRE EDITÁVEL (permitindo alterar para atiradores com múltiplos SIGMAs)
+        sigma_input = st.text_input(
+            "Número do SIGMA:", 
+            value=sigma_valor if not is_novo_cadastro else st.session_state["input_sigma"], 
+            placeholder="Informe o número do SIGMA", 
+            key=f"input_sigma_field_{opcao_selecionada}"
+        )
     with col_cr:
-        cr_input = st.text_input("Número do CR:", value=cr_padrao if opcao_selecionada != "➕ Cadastrar Novo Atirador" else st.session_state["input_cr"], placeholder="Informe o número do CR", key="input_cr")
+        cr_input = st.text_input(
+            "Número do CR:", 
+            value=cr_valor if not is_novo_cadastro else st.session_state["input_cr"], 
+            placeholder="Informe o número do CR", 
+            disabled=not is_novo_cadastro, 
+            key="input_cr_widget" if not is_novo_cadastro else "input_cr"
+        )
 
     col1, col2 = st.columns(2)
     with col1:
@@ -355,18 +377,35 @@ if aba == "🎯 Registro de Habituação (Atirador)":
     st.info("📌 Registro com carimbo de tempo e hash criptográfico de validação (Lei 14.063/2020).")
 
     if st.button("✅ Registrar Habituação", type="primary", use_container_width=True):
+        nome_final = nome_input.strip().upper() if nome_input else ""
+        cr_final = cr_input.strip().upper() if cr_input else ""
+        sigma_final = sigma_input.strip().upper() if sigma_input else ""
+
         # --- VALIDAÇÕES DE CAMPOS OBRIGATÓRIOS ---
-        if not nome_input or not nome_input.strip():
+        if not nome_final:
             st.error("⚠️ Preenchimento obrigatório: Por favor, informe o Nome do Atirador.")
             st.stop()
 
-        if not cr_input or not cr_input.strip():
+        if not cr_final:
             st.error("⚠️ Preenchimento obrigatório: Por favor, informe o CR do Atirador.")
             st.stop()
 
-        if not sigma_input or not sigma_input.strip():
+        if not sigma_final:
             st.error("⚠️ Preenchimento obrigatório: Por favor, informe o número do SIGMA.")
             st.stop()
+
+        # --- VERIFICAÇÃO DE DUPLICIDADE EM CASO DE NOVO CADASTRO ---
+        if is_novo_cadastro and lista_cadastrados:
+            nomes_existentes = [a['nome'].upper() for a in lista_cadastrados]
+            crs_existentes = [a['cr'].upper() for a in lista_cadastrados if a['cr']]
+
+            if nome_final in nomes_existentes:
+                st.error(f"⚠️ Atirador já cadastrado! O nome '{nome_final}' já existe no sistema. Por favor, selecione-o no campo de busca 'Selecionar Atirador Cadastrado'.")
+                st.stop()
+
+            if cr_final in crs_existentes:
+                st.error(f"⚠️ CR já cadastrado! O CR '{cr_final}' já pertence a outro atirador. Por favor, selecione o atirador no campo de busca acima.")
+                st.stop()
 
         try:
             qtd_municao = int(qtd_input.strip())
@@ -393,9 +432,9 @@ if aba == "🎯 Registro de Habituação (Atirador)":
         with st.spinner("Gravando no Google Sheets..."):
             try:
                 salvar_habituação_sheets(
-                    nome_input.strip().upper(),
-                    cr_input.strip().upper(),
-                    sigma_input.strip().upper(),
+                    nome_final,
+                    cr_final,
+                    sigma_final,
                     tipo_arma,
                     tipo_municao,
                     qtd_municao,
