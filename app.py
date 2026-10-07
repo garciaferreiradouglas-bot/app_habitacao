@@ -5,7 +5,7 @@ from PIL import Image
 import io
 import base64
 import hashlib
-from datetime import datetime
+from datetime import datetime, date
 import numpy as np
 import openpyxl
 from openpyxl.drawing.image import Image as OpenPyxlImage
@@ -119,7 +119,6 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     data_hora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     registro_id = str(uuid.uuid4())[:8]
 
-    # Força a conversão para caixa alta
     nome = nome.strip().upper()
     cr = cr.strip().upper()
     sigma = sigma.strip().upper() if sigma else ""
@@ -474,6 +473,7 @@ with col_centro:
                     st.error(f"Erro ao salvar: {e}")
 
     else:
+        # --- PAINEL ADMINISTRATIVO COM FILTROS DE ATIRADOR E DATAS ---
         col_titulo, col_filtro = st.columns([1.5, 1])
         with col_titulo:
             st.title("📊 Painel Administrativo")
@@ -497,82 +497,107 @@ with col_centro:
                 key="select_filtro_admin"
             )
 
+            # FILTRO POR INTERVALO DE DATAS (NOVO)
+            intervalo_datas = st.date_input(
+                "📅 Filtrar por Período (Início - Fim):",
+                value=(),
+                format="DD/MM/YYYY",
+                key="filtro_datas_admin"
+            )
+
         st.write("Visualização de registros salvos no Google Sheets e exportação em Excel/PDF.")
 
         if df_hab.empty:
             st.info("Nenhuma habituação registrada até o momento.")
         else:
+            df_filtrado = df_hab.copy()
+
+            # 1. Filtro por Atirador
             if cliente_selecionado and cliente_selecionado != "Todos os Atiradores":
-                df_exibicao_base = df_hab[df_hab['nome_atirador'] == cliente_selecionado]
-            else:
-                df_exibicao_base = df_hab.copy()
+                df_filtrado = df_filtrado[df_filtrado['nome_atirador'] == cliente_selecionado]
 
-            cols_ocultar = [c for c in df_exibicao_base.columns if 'assinatura' in c.lower()]
-            df_exibicao = df_exibicao_base.drop(columns=cols_ocultar, errors='ignore')
-            st.dataframe(df_exibicao, use_container_width=True)
-
-            st.subheader("🔍 Visualizar Registros e Assinaturas")
-            
-            for idx, row in df_exibicao_base.iterrows():
-                nome = row.get('nome_atirador', '')
-                dt = row.get('data_hora', '')
-                reg_id = row.get('id', idx)
+            # 2. Filtro por Intervalo de Datas
+            if 'data_hora' in df_filtrado.columns and isinstance(intervalo_datas, (list, tuple)) and len(intervalo_datas) > 0:
+                df_filtrado['dt_parsed'] = pd.to_datetime(df_filtrado['data_hora'], errors='coerce').dt.date
                 
-                with st.expander(f"ID #{reg_id} - {nome} ({dt})"):
-                    col_info, col_img = st.columns([1, 1])
+                if len(intervalo_datas) == 2:
+                    data_ini, data_fim = intervalo_datas[0], intervalo_datas[1]
+                    df_filtrado = df_filtrado[(df_filtrado['dt_parsed'] >= data_ini) & (df_filtrado['dt_parsed'] <= data_fim)]
+                elif len(intervalo_datas) == 1:
+                    data_unica = intervalo_datas[0]
+                    df_filtrado = df_filtrado[df_filtrado['dt_parsed'] == data_unica]
+
+                df_filtrado = df_filtrado.drop(columns=['dt_parsed'], errors='ignore')
+
+            if df_filtrado.empty:
+                st.warning("Nenhum registro encontrado para os filtros selecionados.")
+            else:
+                cols_ocultar = [c for c in df_filtrado.columns if 'assinatura' in c.lower()]
+                df_exibicao = df_filtrado.drop(columns=cols_ocultar, errors='ignore')
+                st.dataframe(df_exibicao, use_container_width=True)
+
+                st.subheader("🔍 Visualizar Registros e Assinaturas")
+                
+                for idx, row in df_filtrado.iterrows():
+                    nome = row.get('nome_atirador', '')
+                    dt = row.get('data_hora', '')
+                    reg_id = row.get('id', idx)
                     
-                    with col_info:
-                        st.markdown(f"**Atirador:** {row.get('nome_atirador', '')}")
-                        st.markdown(f"**CR:** {row.get('cr_atirador', '')}")
-                        st.markdown(f"**SIGMA:** {row.get('sigma_atirador', 'N/A')}")
-                        st.markdown(f"**Arma/Calibre:** {row.get('tipo_arma', '')} - {row.get('tipo_municao', '')}")
-                        st.markdown(f"**Qtd. Munição:** {row.get('qtd_municao', '')}")
-                        st.markdown(f"**Hash SHA-256:** `{row.get('hash_integridade', '')}`")
-                    
-                    with col_img:
-                        st.markdown("**Assinatura Capturada:**")
-                        ass_b64 = obter_valor_assinatura(row)
-                        if ass_b64:
-                            try:
-                                img_bytes = base64.b64decode(ass_b64)
-                                st.image(img_bytes, width=280)
-                            except Exception:
-                                st.error("Erro ao converter imagem Base64.")
-                        else:
-                            st.caption("Sem imagem de assinatura válida nesta linha.")
+                    with st.expander(f"ID #{reg_id} - {nome} ({dt})"):
+                        col_info, col_img = st.columns([1, 1])
+                        
+                        with col_info:
+                            st.markdown(f"**Atirador:** {row.get('nome_atirador', '')}")
+                            st.markdown(f"**CR:** {row.get('cr_atirador', '')}")
+                            st.markdown(f"**SIGMA:** {row.get('sigma_atirador', 'N/A')}")
+                            st.markdown(f"**Arma/Calibre:** {row.get('tipo_arma', '')} - {row.get('tipo_municao', '')}")
+                            st.markdown(f"**Qtd. Munição:** {row.get('qtd_municao', '')}")
+                            st.markdown(f"**Hash SHA-256:** `{row.get('hash_integridade', '')}`")
+                        
+                        with col_img:
+                            st.markdown("**Assinatura Capturada:**")
+                            ass_b64 = obter_valor_assinatura(row)
+                            if ass_b64:
+                                try:
+                                    img_bytes = base64.b64decode(ass_b64)
+                                    st.image(img_bytes, width=280)
+                                except Exception:
+                                    st.error("Erro ao converter imagem Base64.")
+                            else:
+                                st.caption("Sem imagem de assinatura válida nesta linha.")
 
-            st.markdown("---")
-            
-            col_btn_excel, col_btn_pdf = st.columns([1, 1])
+                st.markdown("---")
+                
+                col_btn_excel, col_btn_pdf = st.columns([1, 1])
 
-            with col_btn_excel:
-                excel_data = gerar_excel_com_assinaturas(df_exibicao_base)
-                st.download_button(
-                    label="📥 Baixar Planilha Completa com Assinaturas (Excel)",
-                    data=excel_data,
-                    file_name=f"habituacoes_com_assinaturas_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="primary",
-                    use_container_width=True
-                )
-
-            with col_btn_pdf:
-                if cliente_selecionado and cliente_selecionado != "Todos os Atiradores" and not df_exibicao_base.empty:
-                    pdf_data = gerar_pdf_relatorio_cliente(df_exibicao_base, cliente_selecionado)
+                with col_btn_excel:
+                    excel_data = gerar_excel_com_assinaturas(df_filtrado)
                     st.download_button(
-                        label=f"📄 Baixar Relatório PDF ({cliente_selecionado})",
-                        data=pdf_data,
-                        file_name=f"relatorio_habituação_{cliente_selecionado.replace(' ', '_')}.pdf",
-                        mime="application/pdf",
+                        label="📥 Baixar Planilha Completa com Assinaturas (Excel)",
+                        data=excel_data,
+                        file_name=f"habituacoes_com_assinaturas_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        type="primary",
                         use_container_width=True
                     )
-                else:
-                    st.button(
-                        "📄 Selecione um Atirador para PDF",
-                        disabled=True,
-                        use_container_width=True,
-                        help="Selecione um atirador específico no filtro do topo para gerar o relatório em PDF."
-                    )
+
+                with col_btn_pdf:
+                    if cliente_selecionado and cliente_selecionado != "Todos os Atiradores" and not df_filtrado.empty:
+                        pdf_data = gerar_pdf_relatorio_cliente(df_filtrado, cliente_selecionado)
+                        st.download_button(
+                            label=f"📄 Baixar Relatório PDF ({cliente_selecionado})",
+                            data=pdf_data,
+                            file_name=f"relatorio_habituação_{cliente_selecionado.replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    else:
+                        st.button(
+                            "📄 Selecione um Atirador para PDF",
+                            disabled=True,
+                            use_container_width=True,
+                            help="Selecione um atirador específico no filtro do topo para gerar o relatório em PDF."
+                        )
 
     # --- RODAPÉ INSTITUCIONAL DE AUTORIA ---
     st.markdown("---")
