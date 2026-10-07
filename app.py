@@ -299,24 +299,41 @@ with col_centro:
         df_hab = carregar_habituacoes_sheets()
         lista_cadastrados = obter_atiradores_existentes(df_hab)
 
-        # --- BUSCA COM PESQUISA ATIVADA (SELEÇÃO DIGITÁVEL) ---
+        # --- CAMPO DIGITÁVEL COM MODALIDADE QUE FORÇA O TECLADO VIRTUAL NO TABLET ---
         opcoes_rotulos = [a['rotulo'] for a in lista_cadastrados]
         opcao_selecionada = st.selectbox(
             "🔍 Buscar Atirador Cadastrado:",
             options=opcoes_rotulos,
             index=None,
-            placeholder="Digite para pesquisar (Ex: Nome ou CR)...",
+            placeholder="Clique aqui e digite o Nome ou CR...",
+            accept_new_options=True,
             key=f"select_atirador_{v}"
         )
 
-        is_novo_cadastro = (opcao_selecionada is None)
+        # SE O USUÁRIO DIGITOU ALGO NOVO OU FICOU EM BRANCO -> NOVO CADASTRO
+        # SE ELE SELECIONOU UM DA LISTA -> MODO CADASTRADO
+        is_novo_cadastro = True
+        atirador_obj = None
+
+        if opcao_selecionada:
+            # Tenta encontrar correspondência exata nos cadastrados
+            match = [a for a in lista_cadastrados if a['rotulo'] == opcao_selecionada]
+            if match:
+                is_novo_cadastro = False
+                atirador_obj = match[0]
 
         if is_novo_cadastro:
-            nome_input = st.text_input("Nome Completo do Atirador:", placeholder="Informe o nome completo para cadastrar", key=f"input_nome_{v}")
+            # Se ele digitou um nome novo diretamente no campo de busca, já preenche o nome
+            nome_inicial = opcao_selecionada if opcao_selecionada else ""
+            nome_input = st.text_input(
+                "Nome Completo do Atirador:", 
+                value=nome_inicial, 
+                placeholder="Informe o nome completo para cadastrar", 
+                key=f"input_nome_{v}_{opcao_selecionada}"
+            )
             cr_valor = ""
             sigma_valor = ""
         else:
-            atirador_obj = next(a for a in lista_cadastrados if a['rotulo'] == opcao_selecionada)
             nome_input = atirador_obj['nome']
             cr_valor = atirador_obj['cr']
             sigma_valor = atirador_obj['sigma']
