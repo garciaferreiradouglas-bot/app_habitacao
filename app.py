@@ -299,7 +299,6 @@ with col_centro:
         df_hab = carregar_habituacoes_sheets()
         lista_cadastrados = obter_atiradores_existentes(df_hab)
 
-        # --- CAMPO DIGITÁVEL COM MODALIDADE QUE FORÇA O TECLADO VIRTUAL NO TABLET ---
         opcoes_rotulos = [a['rotulo'] for a in lista_cadastrados]
         opcao_selecionada = st.selectbox(
             "🔍 Buscar Atirador Cadastrado:",
@@ -310,20 +309,16 @@ with col_centro:
             key=f"select_atirador_{v}"
         )
 
-        # SE O USUÁRIO DIGITOU ALGO NOVO OU FICOU EM BRANCO -> NOVO CADASTRO
-        # SE ELE SELECIONOU UM DA LISTA -> MODO CADASTRADO
         is_novo_cadastro = True
         atirador_obj = None
 
         if opcao_selecionada:
-            # Tenta encontrar correspondência exata nos cadastrados
             match = [a for a in lista_cadastrados if a['rotulo'] == opcao_selecionada]
             if match:
                 is_novo_cadastro = False
                 atirador_obj = match[0]
 
         if is_novo_cadastro:
-            # Se ele digitou um nome novo diretamente no campo de busca, já preenche o nome
             nome_inicial = opcao_selecionada if opcao_selecionada else ""
             nome_input = st.text_input(
                 "Nome Completo do Atirador:", 
@@ -462,6 +457,7 @@ with col_centro:
                     st.error(f"Erro ao salvar: {e}")
 
     else:
+        # --- PAINEL ADMINISTRATIVO COM FILTRO DIGITÁVEL NO TABLET ---
         col_titulo, col_filtro = st.columns([1.5, 1])
         with col_titulo:
             st.title("📊 Painel Administrativo")
@@ -476,14 +472,21 @@ with col_centro:
             else:
                 lista_clientes = ["Todos os Atiradores"]
                 
-            cliente_selecionado = st.selectbox("🎯 Filtrar por Atirador:", options=lista_clientes)
+            cliente_selecionado = st.selectbox(
+                "🎯 Filtrar por Atirador:", 
+                options=lista_clientes,
+                index=0,
+                placeholder="Digite para filtrar o atirador...",
+                accept_new_options=True,
+                key="select_filtro_admin"
+            )
 
         st.write("Visualização de registros salvos no Google Sheets e exportação em Excel/PDF.")
 
         if df_hab.empty:
             st.info("Nenhuma habituação registrada até o momento.")
         else:
-            if cliente_selecionado != "Todos os Atiradores":
+            if cliente_selecionado and cliente_selecionado != "Todos os Atiradores":
                 df_exibicao_base = df_hab[df_hab['nome_atirador'] == cliente_selecionado]
             else:
                 df_exibicao_base = df_hab.copy()
@@ -538,7 +541,7 @@ with col_centro:
                 )
 
             with col_btn_pdf:
-                if cliente_selecionado != "Todos os Atiradores" and not df_exibicao_base.empty:
+                if cliente_selecionado and cliente_selecionado != "Todos os Atiradores" and not df_exibicao_base.empty:
                     pdf_data = gerar_pdf_relatorio_cliente(df_exibicao_base, cliente_selecionado)
                     st.download_button(
                         label=f"📄 Baixar Relatório PDF ({cliente_selecionado})",
