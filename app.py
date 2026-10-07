@@ -457,7 +457,6 @@ with col_centro:
                     st.error(f"Erro ao salvar: {e}")
 
     else:
-        # --- PAINEL ADMINISTRATIVO COM FILTRO DIGITÁVEL NO TABLET ---
         col_titulo, col_filtro = st.columns([1.5, 1])
         with col_titulo:
             st.title("📊 Painel Administrativo")
@@ -557,3 +556,12 @@ with col_centro:
                         use_container_width=True,
                         help="Selecione um atirador específico no filtro do topo para gerar o relatório em PDF."
                     )
+
+    # --- RODAPÉ INSTITUCIONAL DE AUTORIA ---
+    st.markdown("---")
+    st.markdown(
+        "<div style='text-align: center; color: #777777; font-size: 13px; margin-top: 10px;'>"
+        "💻 <b>Desenvolvido por Rodrigo H Neves</b> &copy; 2026 | Sistema de Habituação de Atiradores"
+        "</div>",
+        unsafe_allow_html=True
+    )
