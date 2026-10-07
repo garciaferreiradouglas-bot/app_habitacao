@@ -22,11 +22,11 @@ import os
 st.set_page_config(
     page_title="Habituação de Atiradores",
     page_icon="🎯",
-    layout="wide",  # Layout expandido para acomodar os logos laterais
+    layout="wide",  # Layout em largura total para as colunas laterais
     initial_sidebar_state="collapsed"
 )
 
-# --- NOMES DOS FICHEIROS DAS IMAGENS ---
+# --- NOMES DOS FICHEIROS DAS IMAGENS/LOGOS ---
 PATH_LOGO_ESQUERDA = "Logo_Dominio-removebg-preview.jpg"
 PATH_LOGO_DIREITA = "LOGO_CCTU-removebg-preview.png"
 
@@ -301,7 +301,7 @@ if "form_version" not in st.session_state:
 
 v = st.session_state["form_version"]
 
-# --- DIVISÃO EM 3 COLUNAS PARA EXIBIR OS LOGOS NAS LATERAIS ---
+# --- DIVISÃO EM 3 COLUNAS COM OS LOGOS NAS LATERAIS (1 : 2 : 1) ---
 col_esquerda, col_centro, col_direita = st.columns([1, 2, 1])
 
 with col_esquerda:
