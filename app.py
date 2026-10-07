@@ -311,14 +311,15 @@ if aba == "🎯 Registro de Habituação (Atirador)":
     df_hab = carregar_habituacoes_sheets()
     lista_cadastrados = obter_atiradores_existentes(df_hab)
 
-    # --- CAMPO DE BUSCA E SELEÇÃO DE CADASTRADOS ---
-    opcoes_select = ["➕ Novo Cadastro (Preencher abaixo)"] + [a['rotulo'] for a in lista_cadastrados]
-    opcao_selecionada = st.selectbox("🔍 Selecionar Atirador Cadastrado:", options=opcoes_select, key="select_atirador")
+    # --- BUSCA E SELEÇÃO DE CADASTRADOS ---
+    TEXTO_PADRAO_SELECT = "-- Selecione um Atirador Cadastrado --"
+    opcoes_select = [TEXTO_PADRAO_SELECT] + [a['rotulo'] for a in lista_cadastrados]
+    opcao_selecionada = st.selectbox("🔍 Selecione seu Cadastro:", options=opcoes_select, key="select_atirador")
 
-    is_novo_cadastro = (opcao_selecionada == "➕ Novo Cadastro (Preencher abaixo)")
+    is_novo_cadastro = (opcao_selecionada == TEXTO_PADRAO_SELECT)
 
     if is_novo_cadastro:
-        nome_input = st.text_input("➕ Cadastrar Novo Atirador (Nome Completo):", placeholder="Informe o nome completo para cadastrar", key="input_nome_novo")
+        nome_input = st.text_input("Nome Completo do Atirador:", placeholder="Informe o nome completo para cadastrar", key="input_nome_novo")
         cr_valor = st.session_state["input_cr"]
         sigma_valor = st.session_state["input_sigma"]
     else:
@@ -327,11 +328,10 @@ if aba == "🎯 Registro de Habituação (Atirador)":
         cr_valor = atirador_obj['cr']
         sigma_valor = atirador_obj['sigma']
         
-        st.text_input("➕ Cadastrar Novo Atirador (Nome Completo):", value=nome_input, disabled=True, help="Atirador já cadastrado selecionado na busca acima.")
+        st.text_input("Nome Completo do Atirador:", value=nome_input, disabled=True, help="Atirador selecionado na busca acima.")
 
     col_sigma, col_cr = st.columns(2)
     with col_sigma:
-        # SIGMA SEMPRE EDITÁVEL (permitindo alterar para atiradores com múltiplos SIGMAs)
         sigma_input = st.text_input(
             "Número do SIGMA:", 
             value=sigma_valor if not is_novo_cadastro else st.session_state["input_sigma"], 
@@ -400,11 +400,11 @@ if aba == "🎯 Registro de Habituação (Atirador)":
             crs_existentes = [a['cr'].upper() for a in lista_cadastrados if a['cr']]
 
             if nome_final in nomes_existentes:
-                st.error(f"⚠️ Atirador já cadastrado! O nome '{nome_final}' já existe no sistema. Por favor, selecione-o no campo de busca 'Selecionar Atirador Cadastrado'.")
+                st.error(f"⚠️ Atirador já cadastrado! O nome '{nome_final}' já existe no sistema. Por favor, selecione-o no campo 'Selecione seu Cadastro'.")
                 st.stop()
 
             if cr_final in crs_existentes:
-                st.error(f"⚠️ CR já cadastrado! O CR '{cr_final}' já pertence a outro atirador. Por favor, selecione o atirador no campo de busca acima.")
+                st.error(f"⚠️ CR já cadastrado! O CR '{cr_final}' já pertence a outro atirador. Por favor, selecione seu cadastro acima.")
                 st.stop()
 
         try:
