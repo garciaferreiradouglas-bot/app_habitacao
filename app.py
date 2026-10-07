@@ -22,11 +22,11 @@ import os
 st.set_page_config(
     page_title="Habituação de Atiradores",
     page_icon="🎯",
-    layout="wide",  # Layout expandido para acomodar os logos laterais
+    layout="wide",  # Otimizado para tela horizontal
     initial_sidebar_state="collapsed"
 )
 
-# --- NOMES DOS FICHEIROS DAS IMAGENS ---
+# --- NOMES DOS FICHEIROS DAS IMAGENS/LOGOS ---
 PATH_LOGO_ESQUERDA = "Logo_Dominio-removebg-preview.jpg"
 PATH_LOGO_DIREITA = "LOGO_CCTU-removebg-preview.png"
 
@@ -301,22 +301,22 @@ if "form_version" not in st.session_state:
 
 v = st.session_state["form_version"]
 
-# --- DIVISÃO EM 3 COLUNAS PARA EXIBIR OS LOGOS NAS LATERAIS ---
-col_esquerda, col_centro, col_direita = st.columns([1, 2, 1])
+# --- LAYOUT DE 3 COLUNAS ALINHADAS PARA TABLET HORIZONTAL ---
+col_esquerda, col_centro, col_direita = st.columns([1, 3.5, 1])
 
 with col_esquerda:
-    st.write("")
+    # Ajuste de alinhamento e altura da logo esquerda
     if os.path.exists(PATH_LOGO_ESQUERDA):
-        st.image(PATH_LOGO_ESQUERDA, use_container_width=True)
+        st.image(PATH_LOGO_ESQUERDA, height=150)
     elif os.path.exists("Logo_Dominio-removebg-preview.png"):
-        st.image("Logo_Dominio-removebg-preview.png", use_container_width=True)
+        st.image("Logo_Dominio-removebg-preview.png", height=150)
 
 with col_direita:
-    st.write("")
+    # Ajuste de alinhamento e altura da logo direita
     if os.path.exists(PATH_LOGO_DIREITA):
-        st.image(PATH_LOGO_DIREITA, use_container_width=True)
+        st.image(PATH_LOGO_DIREITA, height=150)
     elif os.path.exists("LOGO_CCTU-removebg-preview.jpg"):
-        st.image("LOGO_CCTU-removebg-preview.jpg", use_container_width=True)
+        st.image("LOGO_CCTU-removebg-preview.jpg", height=150)
 
 with col_centro:
     # --- ABAS DE NAVEGAÇÃO ---
