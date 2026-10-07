@@ -349,7 +349,8 @@ if aba == "🎯 Registro de Habituação (Atirador)":
     with col2:
         tipo_municao = st.selectbox("Tipo/Calibre de Munição:", OPCOES_MUNICAO_POR_ARMA[tipo_arma], key=f"select_tipo_municao_{v}")
 
-    qtd_input = st.text_input("Quantidade de Munição Utilizada:", value="50", key=f"input_qtd_{v}")
+    # CAMPO DE QUANTIDADE DE MUNIÇÃO INICIA EM BRANCO (SEM VALOR PADRÃO 50)
+    qtd_input = st.text_input("Quantidade de Munição Utilizada:", placeholder="Informe a quantidade utilizada", key=f"input_qtd_{v}")
 
     st.subheader("🖋️ Assinatura Digital")
     st.caption("Assine dentro da caixa abaixo:")
@@ -390,6 +391,20 @@ if aba == "🎯 Registro de Habituação (Atirador)":
             st.error("⚠️ Preenchimento obrigatório: Por favor, informe o número do SIGMA.")
             st.stop()
 
+        # VALIDAÇÃO DE QUANTIDADE (INÍCIO EM BRANCO / BLOQUEIA SE VAZIO OU INVÁLIDO)
+        if not qtd_input or not qtd_input.strip():
+            st.error("⚠️ Preenchimento obrigatório: Por favor, informe a quantidade de munição utilizada.")
+            st.stop()
+
+        try:
+            qtd_municao = int(qtd_input.strip())
+            if qtd_municao <= 0:
+                st.error("⚠️ A quantidade de munição deve ser maior que zero.")
+                st.stop()
+        except ValueError:
+            st.error("⚠️ Por favor, informe um número válido para a quantidade de munição.")
+            st.stop()
+
         # --- VERIFICAÇÃO DE DUPLICIDADE EM CASO DE NOVO CADASTRO ---
         if is_novo_cadastro and lista_cadastrados:
             nomes_existentes = [a['nome'].upper() for a in lista_cadastrados]
@@ -402,15 +417,6 @@ if aba == "🎯 Registro de Habituação (Atirador)":
             if cr_final in crs_existentes:
                 st.error(f"⚠️ CR já cadastrado! O CR '{cr_final}' já pertence a outro atirador. Por favor, selecione seu cadastro acima.")
                 st.stop()
-
-        try:
-            qtd_municao = int(qtd_input.strip())
-            if qtd_municao <= 0:
-                st.error("⚠️ A quantidade de munição deve ser maior que zero.")
-                st.stop()
-        except ValueError:
-            st.error("⚠️ Por favor, informe um número válido para a quantidade de munição.")
-            st.stop()
 
         img_data = canvas_result.image_data if canvas_result is not None else None
         assinatura_valida = False
