@@ -26,6 +26,18 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# --- CSS PARA FORÇAR CAIXA ALTA (MAIÚSCULAS) EM TEMPO REAL NOS CAMPOS DE TEXTO ---
+st.markdown(
+    """
+    <style>
+    input[type="text"] {
+        text-transform: uppercase;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- NOMES DOS FICHEIROS DAS IMAGENS/LOGOS ---
 PATH_LOGO_ESQUERDA = "Logo_Dominio-removebg-preview.jpg"
 PATH_LOGO_DIREITA = "LOGO_CCTU-removebg-preview.png"
@@ -106,6 +118,11 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
 
     data_hora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     registro_id = str(uuid.uuid4())[:8]
+
+    # Força a conversão para caixa alta
+    nome = nome.strip().upper()
+    cr = cr.strip().upper()
+    sigma = sigma.strip().upper() if sigma else ""
 
     payload_validacao = f"{data_hora_str}|{nome}|{cr}|{sigma}|{arma}|{municao}|{qtd}|{assinatura_b64[:50]}"
     hash_integridade = hashlib.sha256(payload_validacao.encode('utf-8')).hexdigest()
@@ -232,18 +249,18 @@ def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, "RELATÓRIO DE HABITUAÇÃO DE ATIRADOR", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 8, f"Atirador: {nome_cliente}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.cell(0, 8, f"Atirador: {nome_cliente.upper()}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
     
     cr_val = df_cliente['cr_atirador'].iloc[0] if 'cr_atirador' in df_cliente.columns and not df_cliente.empty else ""
     if cr_val:
-        pdf.cell(0, 6, f"CR: {cr_val}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
+        pdf.cell(0, 6, f"CR: {str(cr_val).upper()}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(8)
     
     for idx, row in df_cliente.iterrows():
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(0, 6, f"Registo ID: {row.get('id', '')} - Data/Hora: {row.get('data_hora', '')}", border="T", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", "", 10)
-        pdf.cell(0, 5, f"SIGMA: {row.get('sigma_atirador', 'N/A')} | Arma: {row.get('tipo_arma', '')} | Munição: {row.get('tipo_municao', '')} | Qtd: {row.get('qtd_municao', '')}", border=0, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 5, f"SIGMA: {str(row.get('sigma_atirador', 'N/A')).upper()} | Arma: {row.get('tipo_arma', '')} | Munição: {row.get('tipo_municao', '')} | Qtd: {row.get('qtd_municao', '')}", border=0, new_x="LMARGIN", new_y="NEXT")
         
         hash_val = str(row.get('hash_integridade', ''))
         pdf.set_font("Helvetica", "I", 8)
@@ -319,7 +336,7 @@ with col_centro:
                 atirador_obj = match[0]
 
         if is_novo_cadastro:
-            nome_inicial = opcao_selecionada if opcao_selecionada else ""
+            nome_inicial = opcao_selecionada.upper() if opcao_selecionada else ""
             nome_input = st.text_input(
                 "Nome Completo do Atirador:", 
                 value=nome_inicial, 
