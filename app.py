@@ -289,17 +289,13 @@ def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
 
     return bytes(pdf.output())
 
-# --- ESTADO INICIAL DOS CAMPOS DO FORMULÁRIO ---
+# --- CONTROLE DE ESTADO E REINICIALIZAÇÃO DO FORMULÁRIO ---
 if "canvas_key" not in st.session_state:
     st.session_state["canvas_key"] = 0
-if "input_nome_novo" not in st.session_state:
-    st.session_state["input_nome_novo"] = ""
-if "input_sigma" not in st.session_state:
-    st.session_state["input_sigma"] = ""
-if "input_cr" not in st.session_state:
-    st.session_state["input_cr"] = ""
-if "input_qtd" not in st.session_state:
-    st.session_state["input_qtd"] = "50"
+if "form_version" not in st.session_state:
+    st.session_state["form_version"] = 0
+
+v = st.session_state["form_version"]
 
 # --- ABAS DE NAVEGAÇÃO ---
 aba = st.radio("Selecione o Modo:", ["🎯 Registro de Habituação (Atirador)", "📊 Painel Admin / Exportar"], horizontal=True)
@@ -314,46 +310,46 @@ if aba == "🎯 Registro de Habituação (Atirador)":
     # --- BUSCA E SELEÇÃO DE CADASTRADOS ---
     TEXTO_PADRAO_SELECT = "-- Selecione um Atirador Cadastrado --"
     opcoes_select = [TEXTO_PADRAO_SELECT] + [a['rotulo'] for a in lista_cadastrados]
-    opcao_selecionada = st.selectbox("🔍 Selecione seu Cadastro:", options=opcoes_select, key="select_atirador")
+    opcao_selecionada = st.selectbox("🔍 Selecione seu Cadastro:", options=opcoes_select, key=f"select_atirador_{v}")
 
     is_novo_cadastro = (opcao_selecionada == TEXTO_PADRAO_SELECT)
 
     if is_novo_cadastro:
-        nome_input = st.text_input("Nome Completo do Atirador:", placeholder="Informe o nome completo para cadastrar", key="input_nome_novo")
-        cr_valor = st.session_state["input_cr"]
-        sigma_valor = st.session_state["input_sigma"]
+        nome_input = st.text_input("Nome Completo do Atirador:", placeholder="Informe o nome completo para cadastrar", key=f"input_nome_{v}")
+        cr_valor = ""
+        sigma_valor = ""
     else:
         atirador_obj = next(a for a in lista_cadastrados if a['rotulo'] == opcao_selecionada)
         nome_input = atirador_obj['nome']
         cr_valor = atirador_obj['cr']
         sigma_valor = atirador_obj['sigma']
         
-        st.text_input("Nome Completo do Atirador:", value=nome_input, disabled=True, help="Atirador selecionado na busca acima.")
+        st.text_input("Nome Completo do Atirador:", value=nome_input, disabled=True, help="Atirador selecionado na busca acima.", key=f"input_nome_dis_{v}")
 
     col_sigma, col_cr = st.columns(2)
     with col_sigma:
         sigma_input = st.text_input(
             "Número do SIGMA:", 
-            value=sigma_valor if not is_novo_cadastro else st.session_state["input_sigma"], 
+            value=sigma_valor if not is_novo_cadastro else "", 
             placeholder="Informe o número do SIGMA", 
-            key=f"input_sigma_field_{opcao_selecionada}"
+            key=f"input_sigma_{v}_{opcao_selecionada}"
         )
     with col_cr:
         cr_input = st.text_input(
             "Número do CR:", 
-            value=cr_valor if not is_novo_cadastro else st.session_state["input_cr"], 
+            value=cr_valor if not is_novo_cadastro else "", 
             placeholder="Informe o número do CR", 
             disabled=not is_novo_cadastro, 
-            key="input_cr_widget" if not is_novo_cadastro else "input_cr"
+            key=f"input_cr_{v}"
         )
 
     col1, col2 = st.columns(2)
     with col1:
-        tipo_arma = st.selectbox("Tipo de Arma:", list(OPCOES_MUNICAO_POR_ARMA.keys()), key="select_tipo_arma")
+        tipo_arma = st.selectbox("Tipo de Arma:", list(OPCOES_MUNICAO_POR_ARMA.keys()), key=f"select_tipo_arma_{v}")
     with col2:
-        tipo_municao = st.selectbox("Tipo/Calibre de Munição:", OPCOES_MUNICAO_POR_ARMA[tipo_arma], key="select_tipo_municao")
+        tipo_municao = st.selectbox("Tipo/Calibre de Munição:", OPCOES_MUNICAO_POR_ARMA[tipo_arma], key=f"select_tipo_municao_{v}")
 
-    qtd_input = st.text_input("Quantidade de Munição Utilizada:", key="input_qtd")
+    qtd_input = st.text_input("Quantidade de Munição Utilizada:", value="50", key=f"input_qtd_{v}")
 
     st.subheader("🖋️ Assinatura Digital")
     st.caption("Assine dentro da caixa abaixo:")
@@ -441,12 +437,9 @@ if aba == "🎯 Registro de Habituação (Atirador)":
                     img_data
                 )
                 
-                # ZERAR DADOS NA TELA
+                # INCREMENTA A VERSÃO DO FORMULÁRIO E A CHAVE DO CANVAS PARA RESETAR TUDO LIMPO
                 st.session_state["canvas_key"] += 1
-                st.session_state["input_nome_novo"] = ""
-                st.session_state["input_sigma"] = ""
-                st.session_state["input_cr"] = ""
-                st.session_state["input_qtd"] = "50"
+                st.session_state["form_version"] += 1
                 
                 st.success("HABITUALIDADE REGISTRADA COM SUCESSO!")
                 time.sleep(2)
