@@ -284,9 +284,17 @@ def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
 
     return bytes(pdf.output())
 
-# --- ESTADO INICIAL ---
+# --- ESTADO INICIAL DOS CAMPOS DO FORMULÁRIO ---
 if "canvas_key" not in st.session_state:
     st.session_state["canvas_key"] = 0
+if "input_nome_novo" not in st.session_state:
+    st.session_state["input_nome_novo"] = ""
+if "input_sigma" not in st.session_state:
+    st.session_state["input_sigma"] = ""
+if "input_cr" not in st.session_state:
+    st.session_state["input_cr"] = ""
+if "input_qtd" not in st.session_state:
+    st.session_state["input_qtd"] = "50"
 
 # --- ABAS DE NAVEGAÇÃO ---
 aba = st.radio("Selecione o Modo:", ["🎯 Registro de Habituação (Atirador)", "📊 Painel Admin / Exportar"], horizontal=True)
@@ -298,23 +306,13 @@ if aba == "🎯 Registro de Habituação (Atirador)":
     df_hab = carregar_habituacoes_sheets()
     lista_cadastrados = obter_atiradores_existentes(df_hab)
 
-    termo_busca = st.text_input("🔍 Digite o nome ou CR para filtrar atiradores existentes:", placeholder="Ex: Carlos ou 9876...")
-
-    if termo_busca:
-        lista_filtrada = [
-            a for a in lista_cadastrados 
-            if termo_busca.upper() in a['rotulo'].upper()
-        ]
-    else:
-        lista_filtrada = lista_cadastrados
-
-    opcoes_select = ["➕ Cadastrar Novo Atirador"] + [a['rotulo'] for a in lista_filtrada]
+    opcoes_select = ["➕ Cadastrar Novo Atirador"] + [a['rotulo'] for a in lista_cadastrados]
     
-    opcao_selecionada = st.selectbox("Selecione seu Nome / CR:", options=opcoes_select, index=0)
+    opcao_selecionada = st.selectbox("Selecione seu Nome / CR:", options=opcoes_select, key="select_atirador")
 
     if opcao_selecionada == "➕ Cadastrar Novo Atirador":
-        nome_input = st.text_input("Nome Completo do Atirador:", placeholder="Informe o nome completo")
-        cr_padrao = ""
+        nome_input = st.text_input("Nome Completo do Atirador:", placeholder="Informe o nome completo", key="input_nome_novo")
+        cr_padrao = st.session_state["input_cr"]
     else:
         atirador_obj = next(a for a in lista_cadastrados if a['rotulo'] == opcao_selecionada)
         nome_input = atirador_obj['nome']
@@ -323,17 +321,17 @@ if aba == "🎯 Registro de Habituação (Atirador)":
 
     col_sigma, col_cr = st.columns(2)
     with col_sigma:
-        sigma_input = st.text_input("Número do SIGMA:", placeholder="Informe o número do SIGMA")
+        sigma_input = st.text_input("Número do SIGMA:", placeholder="Informe o número do SIGMA", key="input_sigma")
     with col_cr:
-        cr_input = st.text_input("Número do CR:", value=cr_padrao, placeholder="Informe o número do CR")
+        cr_input = st.text_input("Número do CR:", value=cr_padrao if opcao_selecionada != "➕ Cadastrar Novo Atirador" else st.session_state["input_cr"], placeholder="Informe o número do CR", key="input_cr")
 
     col1, col2 = st.columns(2)
     with col1:
-        tipo_arma = st.selectbox("Tipo de Arma:", list(OPCOES_MUNICAO_POR_ARMA.keys()))
+        tipo_arma = st.selectbox("Tipo de Arma:", list(OPCOES_MUNICAO_POR_ARMA.keys()), key="select_tipo_arma")
     with col2:
-        tipo_municao = st.selectbox("Tipo/Calibre de Munição:", OPCOES_MUNICAO_POR_ARMA[tipo_arma])
+        tipo_municao = st.selectbox("Tipo/Calibre de Munição:", OPCOES_MUNICAO_POR_ARMA[tipo_arma], key="select_tipo_municao")
 
-    qtd_input = st.text_input("Quantidade de Munição Utilizada:", value="50")
+    qtd_input = st.text_input("Quantidade de Munição Utilizada:", key="input_qtd")
 
     st.subheader("🖋️ Assinatura Digital")
     st.caption("Assine dentro da caixa abaixo:")
@@ -358,23 +356,18 @@ if aba == "🎯 Registro de Habituação (Atirador)":
 
     if st.button("✅ Registrar Habituação", type="primary", use_container_width=True):
         # --- VALIDAÇÕES DE CAMPOS OBRIGATÓRIOS ---
-        
-        # 1. Validação do Nome
         if not nome_input or not nome_input.strip():
             st.error("⚠️ Preenchimento obrigatório: Por favor, informe o Nome do Atirador.")
             st.stop()
 
-        # 2. Validação do CR
         if not cr_input or not cr_input.strip():
             st.error("⚠️ Preenchimento obrigatório: Por favor, informe o CR do Atirador.")
             st.stop()
 
-        # 3. Validação do SIGMA
         if not sigma_input or not sigma_input.strip():
             st.error("⚠️ Preenchimento obrigatório: Por favor, informe o número do SIGMA.")
             st.stop()
 
-        # 4. Validação da Quantidade
         try:
             qtd_municao = int(qtd_input.strip())
             if qtd_municao <= 0:
@@ -384,7 +377,6 @@ if aba == "🎯 Registro de Habituação (Atirador)":
             st.error("⚠️ Por favor, informe um número válido para a quantidade de munição.")
             st.stop()
 
-        # 5. Validação da Assinatura Digital
         img_data = canvas_result.image_data if canvas_result is not None else None
         assinatura_valida = False
         if img_data is not None and isinstance(img_data, np.ndarray):
@@ -397,7 +389,7 @@ if aba == "🎯 Registro de Habituação (Atirador)":
             st.error("⚠️ Preenchimento obrigatório: Por favor, assine no campo de assinatura antes de salvar.")
             st.stop()
 
-        # Gravando no Google Sheets se passou em todas as validações
+        # GRAVAÇÃO E RESET COMPLETO DOS CAMPOS
         with st.spinner("Gravando no Google Sheets..."):
             try:
                 salvar_habituação_sheets(
@@ -409,9 +401,16 @@ if aba == "🎯 Registro de Habituação (Atirador)":
                     qtd_municao,
                     img_data
                 )
+                
+                # ZERAR DADOS NA TELA
                 st.session_state["canvas_key"] += 1
+                st.session_state["input_nome_novo"] = ""
+                st.session_state["input_sigma"] = ""
+                st.session_state["input_cr"] = ""
+                st.session_state["input_qtd"] = "50"
+                
                 st.success("HABITUALIDADE REGISTRADA COM SUCESSO!")
-                time.sleep(3)
+                time.sleep(2)
                 st.rerun()
             except Exception as e:
                 st.error(f"Erro ao salvar: {e}")
