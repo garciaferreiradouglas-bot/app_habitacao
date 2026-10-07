@@ -22,7 +22,7 @@ import os
 st.set_page_config(
     page_title="Habituação de Atiradores",
     page_icon="🎯",
-    layout="wide",  # Layout em largura total para as colunas laterais
+    layout="wide",
     initial_sidebar_state="collapsed"
 )
 
@@ -38,7 +38,6 @@ SCOPES = [
 
 @st.cache_resource
 def get_gspread_client():
-    """Autentica lendo os Secrets em formato JSON nativo do Streamlit Cloud."""
     if "gcp_service_account" not in st.secrets:
         st.error("A seção [gcp_service_account] não foi encontrada nos Secrets do Streamlit.")
         st.stop()
@@ -62,7 +61,6 @@ def get_gspread_client():
     return client
 
 def get_sheet():
-    """Obtém a folha principal do Google Sheets."""
     client = get_gspread_client()
     spreadsheet = client.open("Habituacoes_Clube")
     return spreadsheet.sheet1
@@ -87,17 +85,13 @@ OPCOES_MUNICAO_POR_ARMA = {
     ]
 }
 
-# --- CONVERTE MATRIZ DO CANVAS EM BASE64 ROBUSTO ---
 def processar_imagem_canvas(img_array):
     try:
         img_uint8 = img_array.astype(np.uint8)
         img_pil = Image.fromarray(img_uint8, mode="RGBA")
-        
         img_pil.thumbnail((300, 150))
-        
         background = Image.new("RGB", img_pil.size, (255, 255, 255))
         background.paste(img_pil, mask=img_pil.split()[3])
-        
         buffered = io.BytesIO()
         background.save(buffered, format="PNG", optimize=True)
         return base64.b64encode(buffered.getvalue()).decode('utf-8')
@@ -105,10 +99,8 @@ def processar_imagem_canvas(img_array):
         st.error(f"Erro ao processar imagem da assinatura: {e}")
         return ""
 
-# --- SALVA NO GOOGLE SHEETS ---
 def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     assinatura_b64 = processar_imagem_canvas(img_array)
-    
     if not assinatura_b64:
         raise ValueError("Não foi possível processar o desenho da assinatura.")
 
@@ -134,20 +126,17 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     sheet = get_sheet()
     sheet.append_row(linha_dados)
 
-# --- CARREGA REGISTROS DA PLANILHA ---
 def carregar_habituacoes_sheets():
     try:
         sheet = get_sheet()
         registros = sheet.get_all_records()
         if not registros:
             return pd.DataFrame()
-        df = pd.DataFrame(registros)
-        return df
+        return pd.DataFrame(registros)
     except Exception as e:
         st.error(f"Erro ao carregar dados do Google Sheets: {e}")
         return pd.DataFrame()
 
-# --- OBTER LISTA ÚNICA DE ATIRADORES JÁ CADASTRADOS DA PLANILHA ---
 def obter_atiradores_existentes(df_hab):
     if df_hab.empty or 'nome_atirador' not in df_hab.columns:
         return []
@@ -176,14 +165,11 @@ def obter_atiradores_existentes(df_hab):
             
     return sorted(atiradores, key=lambda x: x['nome'])
 
-# --- BUSCA A COLUNA DA ASSINATURA INDEPENDENTE DO NOME ---
 def obter_valor_assinatura(row):
     colunas_possiveis = ['assinatura_base64a', 'assinatura_base64', 'assinatura', 'Assinatura Digital']
-    
     for col in colunas_possiveis:
         if col in row and pd.notna(row[col]) and str(row[col]).strip() != "":
             val_str = str(row[col]).strip()
-            
             if "base64," in val_str:
                 try:
                     return val_str.split("base64,")[1].split('"')[0].split("'")[0].split(')')[0].strip()
@@ -191,28 +177,23 @@ def obter_valor_assinatura(row):
                     pass
             elif len(val_str) > 100 and not val_str.startswith("http") and not val_str.startswith("="):
                 return val_str
-                
     try:
         val_ind = row.iloc[8]
         if pd.notna(val_ind) and len(str(val_ind)) > 100:
             return str(val_ind).strip()
     except Exception:
         pass
-
     return ""
 
-# --- EXPORTAÇÃO EXCEL COM IMAGENS DAS ASSINATURAS ---
 def gerar_excel_com_assinaturas(df_hab):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Habituações"
-
     headers = [
         "ID", "Data/Hora", "Nome Atirador", "CR", "SIGMA", 
         "Tipo Arma", "Tipo Munição", "Qtd. Munição", "Assinatura Digital", "Hash Integridade"
     ]
     ws.append(headers)
-
     ws.column_dimensions['I'].width = 25
 
     for row_idx, (_, row) in enumerate(df_hab.iterrows(), start=2):
@@ -225,11 +206,9 @@ def gerar_excel_com_assinaturas(df_hab):
         ws.cell(row=row_idx, column=7, value=row.get('tipo_municao', ''))
         ws.cell(row=row_idx, column=8, value=row.get('qtd_municao', ''))
         ws.cell(row=row_idx, column=10, value=row.get('hash_integridade', ''))
-
         ws.row_dimensions[row_idx].height = 55
 
         assinatura_b64 = obter_valor_assinatura(row)
-
         if assinatura_b64:
             try:
                 img_bytes = base64.b64decode(assinatura_b64)
@@ -237,9 +216,7 @@ def gerar_excel_com_assinaturas(df_hab):
                 img = OpenPyxlImage(img_file)
                 img.width = 140
                 img.height = 60
-                
-                cell_address = f"I{row_idx}"
-                ws.add_image(img, cell_address)
+                ws.add_image(img, f"I{row_idx}")
             except Exception:
                 pass
 
@@ -248,12 +225,10 @@ def gerar_excel_com_assinaturas(df_hab):
     buffer.seek(0)
     return buffer.getvalue()
 
-# --- GERAÇÃO DE RELATÓRIO PDF DO CLIENTE ---
 def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, "RELATÓRIO DE HABITUAÇÃO DE ATIRADOR", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font("Helvetica", "", 12)
@@ -262,13 +237,11 @@ def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
     cr_val = df_cliente['cr_atirador'].iloc[0] if 'cr_atirador' in df_cliente.columns and not df_cliente.empty else ""
     if cr_val:
         pdf.cell(0, 6, f"CR: {cr_val}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
-        
     pdf.ln(8)
     
     for idx, row in df_cliente.iterrows():
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(0, 6, f"Registo ID: {row.get('id', '')} - Data/Hora: {row.get('data_hora', '')}", border="T", new_x="LMARGIN", new_y="NEXT")
-        
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(0, 5, f"SIGMA: {row.get('sigma_atirador', 'N/A')} | Arma: {row.get('tipo_arma', '')} | Munição: {row.get('tipo_municao', '')} | Qtd: {row.get('qtd_municao', '')}", border=0, new_x="LMARGIN", new_y="NEXT")
         
@@ -283,12 +256,10 @@ def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
                     tmp_file.write(img_bytes)
                     tmp_path = tmp_file.name
-                
                 pdf.image(tmp_path, x=15, w=50)
                 os.remove(tmp_path)
             except Exception:
                 pdf.cell(0, 5, "[Assinatura Indisponível]", border=0, new_x="LMARGIN", new_y="NEXT")
-        
         pdf.ln(5)
 
     return bytes(pdf.output())
@@ -301,7 +272,7 @@ if "form_version" not in st.session_state:
 
 v = st.session_state["form_version"]
 
-# --- DIVISÃO EM 3 COLUNAS COM OS LOGOS NAS LATERAIS (1 : 2 : 1) ---
+# --- DIVISÃO EM 3 COLUNAS (1 : 2 : 1) ---
 col_esquerda, col_centro, col_direita = st.columns([1, 2, 1])
 
 with col_esquerda:
@@ -319,7 +290,6 @@ with col_direita:
         st.image("LOGO_CCTU-removebg-preview.jpg", use_container_width=True)
 
 with col_centro:
-    # --- ABAS DE NAVEGAÇÃO ---
     aba = st.radio("Selecione o Modo:", ["🎯 Registro de Habituação (Atirador)", "📊 Painel Admin / Exportar"], horizontal=True)
 
     if aba == "🎯 Registro de Habituação (Atirador)":
@@ -329,12 +299,17 @@ with col_centro:
         df_hab = carregar_habituacoes_sheets()
         lista_cadastrados = obter_atiradores_existentes(df_hab)
 
-        # --- BUSCA E SELEÇÃO DE CADASTRADOS ---
-        TEXTO_PADRAO_SELECT = "-- Selecione um Atirador Cadastrado --"
-        opcoes_select = [TEXTO_PADRAO_SELECT] + [a['rotulo'] for a in lista_cadastrados]
-        opcao_selecionada = st.selectbox("🔍 Selecione seu Cadastro:", options=opcoes_select, key=f"select_atirador_{v}")
+        # --- BUSCA COM PESQUISA ATIVADA (SELEÇÃO DIGITÁVEL) ---
+        opcoes_rotulos = [a['rotulo'] for a in lista_cadastrados]
+        opcao_selecionada = st.selectbox(
+            "🔍 Buscar Atirador Cadastrado:",
+            options=opcoes_rotulos,
+            index=None,
+            placeholder="Digite para pesquisar (Ex: Nome ou CR)...",
+            key=f"select_atirador_{v}"
+        )
 
-        is_novo_cadastro = (opcao_selecionada == TEXTO_PADRAO_SELECT)
+        is_novo_cadastro = (opcao_selecionada is None)
 
         if is_novo_cadastro:
             nome_input = st.text_input("Nome Completo do Atirador:", placeholder="Informe o nome completo para cadastrar", key=f"input_nome_{v}")
@@ -399,7 +374,6 @@ with col_centro:
             cr_final = cr_input.strip().upper() if cr_input else ""
             sigma_final = sigma_input.strip().upper() if sigma_input else ""
 
-            # --- VALIDAÇÕES DE CAMPOS OBRIGATÓRIOS ---
             if not nome_final:
                 st.error("⚠️ Preenchimento obrigatório: Por favor, informe o Nome do Atirador.")
                 st.stop()
@@ -425,13 +399,12 @@ with col_centro:
                 st.error("⚠️ Por favor, informe um número válido para a quantidade de munição.")
                 st.stop()
 
-            # --- VERIFICAÇÃO DE DUPLICIDADE EM CASO DE NOVO CADASTRO ---
             if is_novo_cadastro and lista_cadastrados:
                 nomes_existentes = [a['nome'].upper() for a in lista_cadastrados]
                 crs_existentes = [a['cr'].upper() for a in lista_cadastrados if a['cr']]
 
                 if nome_final in nomes_existentes:
-                    st.error(f"⚠️ Atirador já cadastrado! O nome '{nome_final}' já existe no sistema. Por favor, selecione-o no campo 'Selecione seu Cadastro'.")
+                    st.error(f"⚠️ Atirador já cadastrado! O nome '{nome_final}' já existe no sistema. Por favor, selecione-o no campo 'Buscar Atirador Cadastrado'.")
                     st.stop()
 
                 if cr_final in crs_existentes:
@@ -450,7 +423,6 @@ with col_centro:
                 st.error("⚠️ Preenchimento obrigatório: Por favor, assine no campo de assinatura antes de salvar.")
                 st.stop()
 
-            # GRAVAÇÃO E RESET COMPLETO DOS CAMPOS
             with st.spinner("Gravando no Google Sheets..."):
                 try:
                     salvar_habituação_sheets(
@@ -473,9 +445,7 @@ with col_centro:
                     st.error(f"Erro ao salvar: {e}")
 
     else:
-        # --- PAINEL ADMINISTRATIVO COM FILTRO ---
         col_titulo, col_filtro = st.columns([1.5, 1])
-
         with col_titulo:
             st.title("📊 Painel Administrativo")
             
@@ -541,7 +511,6 @@ with col_centro:
 
             with col_btn_excel:
                 excel_data = gerar_excel_com_assinaturas(df_exibicao_base)
-                
                 st.download_button(
                     label="📥 Baixar Planilha Completa com Assinaturas (Excel)",
                     data=excel_data,
@@ -554,7 +523,6 @@ with col_centro:
             with col_btn_pdf:
                 if cliente_selecionado != "Todos os Atiradores" and not df_exibicao_base.empty:
                     pdf_data = gerar_pdf_relatorio_cliente(df_exibicao_base, cliente_selecionado)
-                    
                     st.download_button(
                         label=f"📄 Baixar Relatório PDF ({cliente_selecionado})",
                         data=pdf_data,
