@@ -340,7 +340,7 @@ if aba == "🎯 Registro de Habituação (Atirador)":
             value=cr_valor if not is_novo_cadastro else "", 
             placeholder="Informe o número do CR", 
             disabled=not is_novo_cadastro, 
-            key=f"input_cr_{v}"
+            key=f"input_cr_{v}_{opcao_selecionada}"
         )
 
     col1, col2 = st.columns(2)
