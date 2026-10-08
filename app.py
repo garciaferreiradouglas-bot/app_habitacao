@@ -6,6 +6,7 @@ import io
 import base64
 import hashlib
 from datetime import datetime, date
+import pytz
 import numpy as np
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -26,6 +27,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# --- CONFIGURAÇÃO DE FUSO HORÁRIO BRASÍLIA/SÃO PAULO ---
+FUSO_SP = pytz.timezone("America/Sao_Paulo")
+
+def obter_data_hora_atual():
+    return datetime.now(FUSO_SP)
 
 # --- CSS PARA FORÇAR CAIXA ALTA (MAIÚSCULAS) EM TEMPO REAL NOS CAMPOS DE TEXTO ---
 st.markdown(
@@ -142,7 +149,7 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
     if not assinatura_b64:
         raise ValueError("Não foi possível processar o desenho da assinatura.")
 
-    data_hora_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    data_hora_str = obter_data_hora_atual().strftime("%Y-%m-%d %H:%M:%S")
     registro_id = str(uuid.uuid4())[:8]
 
     nome = nome.strip().upper()
@@ -267,14 +274,12 @@ def gerar_excel_com_assinaturas(df_hab):
     buffer.seek(0)
     return buffer.getvalue()
 
-# --- FUNÇÃO PARA GERAR A PLANILHA NO MODELO OFICIAL SFPC / EXÉRCITO ---
 def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Relação de Atiradores"
     ws.views.sheetView[0].showGridLines = True
 
-    # Estilos
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     grey_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     
@@ -290,14 +295,12 @@ def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
     thin_border_side = Side(border_style="thin", color="000000")
     thin_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
 
-    # Larguras das colunas
     ws.column_dimensions['A'].width = 14
     ws.column_dimensions['B'].width = 45
     ws.column_dimensions['C'].width = 20
     ws.column_dimensions['D'].width = 20
     ws.column_dimensions['E'].width = 28
 
-    # L1: Título Amarelo
     ws.merge_cells('A1:E1')
     cell_a1 = ws['A1']
     cell_a1.value = f"RELAÇÃO DOS ATIRADORES E DOS ATLETAS QUE FREQUENTARAM ESTA ENTIDADE DE TIRO DESPORTIVO NO {periodo_mes_ano}"
@@ -305,7 +308,6 @@ def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
     cell_a1.fill = yellow_fill
     cell_a1.alignment = align_center
 
-    # L2: Cabeçalho Amarelo (Metadados do Clube)
     ws['A2'] = "ORD\nNUMÉRICA"
     ws['B2'] = f"Nome da entidade de tiro: {NOME_ENTIDADE_TIRO}"
     ws['C2'] = f"CR da entidade Tiro: {CR_ENTIDADE_TIRO}\nCNPJ: {CNPJ_ENTIDADE_TIRO}"
@@ -318,8 +320,7 @@ def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
         cell.fill = yellow_fill
         cell.alignment = align_center
 
-    # L3: Cabeçalho Cinzento das Colunas
-    ws['A3'] = ""  # Pertence à mesclagem A2:A3
+    ws['A3'] = ""
     ws['B3'] = "Nome Completo do atirador/atleta"
     ws['C3'] = "CR atirador/atleta"
     ws['D3'] = "CPF atirador/atleta"
@@ -333,14 +334,11 @@ def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
         cell.fill = grey_fill
         cell.alignment = align_center
 
-    # Bordas no cabeçalho
     for r in range(1, 4):
         for c in range(1, 6):
             ws.cell(row=r, column=c).border = thin_border
 
-    # Povoamento dos Dados das Habitualidades
     start_row = 4
-    total_linhas = len(df_hab) if not df_hab.empty else 10
     
     if not df_hab.empty:
         for i, (_, row) in enumerate(df_hab.iterrows(), start=1):
@@ -362,7 +360,6 @@ def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
         
         current_row = start_row + len(df_hab)
     else:
-        # Linhas em branco vazias para modelo impresso
         for i in range(1, 11):
             r_idx = start_row + i - 1
             ws.cell(row=r_idx, column=1, value=i).alignment = align_center
@@ -372,7 +369,6 @@ def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
                 cell.border = thin_border
         current_row = start_row + 10
 
-    # L_Fim: Mensagem Legal do Decreto
     current_row += 1
     ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5)
     cell_legal = ws.cell(row=current_row, column=1)
@@ -380,10 +376,9 @@ def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
     cell_legal.font = font_legal
     cell_legal.alignment = align_center
 
-    # Rodapé de Assinatura
     current_row += 3
     ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5)
-    hoje_str = datetime.now().strftime("%d de %B de %Y")
+    hoje_str = obter_data_hora_atual().strftime("%d de %B de %Y")
     cell_data = ws.cell(row=current_row, column=1)
     cell_data.value = f"{CIDADE_UF_ENTIDADE}, {hoje_str}"
     cell_data.font = font_data
