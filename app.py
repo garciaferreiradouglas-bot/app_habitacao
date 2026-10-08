@@ -8,6 +8,7 @@ import hashlib
 from datetime import datetime, date
 import numpy as np
 import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.drawing.image import Image as OpenPyxlImage
 import time
 import uuid
@@ -38,10 +39,18 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# --- DADOS INSTITUCIONAIS DA ENTIDADE DE TIRO (PARA RELATÓRIO OFICIAL SFPC) ---
+NOME_ENTIDADE_TIRO = "CLUBE DE CAÇA E TIRO URBANO"
+CR_ENTIDADE_TIRO = "123456"
+CNPJ_ENTIDADE_TIRO = "00.000.000/0001-00"
+ENDERECO_ENTIDADE_TIRO = "RUA DO CLUBE, Nº 100 - CENTRO"
+SFPC_VINCULACAO = "5ª RM / SFPC"
+CIDADE_UF_ENTIDADE = "ITAPEJARA D'OESTE - PR"
+NOME_RESPONSAVEL_ENTIDADE = "RODRIGO HENRIQUE NEVES"
+
 # --- NOME DO FICHEIRO DA LOGO ---
 PATH_LOGO = "LOGO_CCTU-removebg-preview.png"
 
-# --- FUNÇÃO PARA OBTER A LOGO EM BASE64 PARA EXIBIR EM LINHA COM O TÍTULO ---
 def obter_logo_base64():
     path_final = None
     if os.path.exists(PATH_LOGO):
@@ -258,6 +267,154 @@ def gerar_excel_com_assinaturas(df_hab):
     buffer.seek(0)
     return buffer.getvalue()
 
+# --- FUNÇÃO PARA GERAR A PLANILHA NO MODELO OFICIAL SFPC / EXÉRCITO ---
+def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Relação de Atiradores"
+    ws.views.sheetView[0].showGridLines = True
+
+    # Estilos
+    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    grey_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    
+    font_bold_title = Font(name="Calibri", size=11, bold=True)
+    font_header = Font(name="Calibri", size=10, bold=True)
+    font_data = Font(name="Calibri", size=10)
+    font_legal = Font(name="Calibri", size=10, bold=True)
+    font_subtext = Font(name="Calibri", size=9, italic=True)
+
+    align_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    thin_border_side = Side(border_style="thin", color="000000")
+    thin_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
+
+    # Larguras das colunas
+    ws.column_dimensions['A'].width = 14
+    ws.column_dimensions['B'].width = 45
+    ws.column_dimensions['C'].width = 20
+    ws.column_dimensions['D'].width = 20
+    ws.column_dimensions['E'].width = 28
+
+    # L1: Título Amarelo
+    ws.merge_cells('A1:E1')
+    cell_a1 = ws['A1']
+    cell_a1.value = f"RELAÇÃO DOS ATIRADORES E DOS ATLETAS QUE FREQUENTARAM ESTA ENTIDADE DE TIRO DESPORTIVO NO {periodo_mes_ano}"
+    cell_a1.font = font_bold_title
+    cell_a1.fill = yellow_fill
+    cell_a1.alignment = align_center
+
+    # L2: Cabeçalho Amarelo (Metadados do Clube)
+    ws['A2'] = "ORD\nNUMÉRICA"
+    ws['B2'] = f"Nome da entidade de tiro: {NOME_ENTIDADE_TIRO}"
+    ws['C2'] = f"CR da entidade Tiro: {CR_ENTIDADE_TIRO}\nCNPJ: {CNPJ_ENTIDADE_TIRO}"
+    ws['D2'] = f"Endereço da entidade de tiro:\n{ENDERECO_ENTIDADE_TIRO}"
+    ws['E2'] = f"SFPC de vinculação:\n{SFPC_VINCULACAO}"
+
+    for col in ['A', 'B', 'C', 'D', 'E']:
+        cell = ws[f'{col}2']
+        cell.font = font_header
+        cell.fill = yellow_fill
+        cell.alignment = align_center
+
+    # L3: Cabeçalho Cinzento das Colunas
+    ws['A3'] = ""  # Pertence à mesclagem A2:A3
+    ws['B3'] = "Nome Completo do atirador/atleta"
+    ws['C3'] = "CR atirador/atleta"
+    ws['D3'] = "CPF atirador/atleta"
+    ws['E3'] = "Data em que frequentou a entidade"
+
+    ws.merge_cells('A2:A3')
+
+    for col in ['A', 'B', 'C', 'D', 'E']:
+        cell = ws[f'{col}3']
+        cell.font = font_header
+        cell.fill = grey_fill
+        cell.alignment = align_center
+
+    # Bordas no cabeçalho
+    for r in range(1, 4):
+        for c in range(1, 6):
+            ws.cell(row=r, column=c).border = thin_border
+
+    # Povoamento dos Dados das Habitualidades
+    start_row = 4
+    total_linhas = len(df_hab) if not df_hab.empty else 10
+    
+    if not df_hab.empty:
+        for i, (_, row) in enumerate(df_hab.iterrows(), start=1):
+            r_idx = start_row + i - 1
+            ws.cell(row=r_idx, column=1, value=i).alignment = align_center
+            ws.cell(row=r_idx, column=2, value=str(row.get('nome_atirador', '')).upper()).alignment = align_left
+            ws.cell(row=r_idx, column=3, value=str(row.get('cr_atirador', '')).upper()).alignment = align_center
+            
+            cpf_val = str(row.get('cpf_atirador', '')) if 'cpf_atirador' in row else ""
+            ws.cell(row=r_idx, column=4, value=cpf_val).alignment = align_center
+            
+            dt_val = str(row.get('data_hora', ''))
+            ws.cell(row=r_idx, column=5, value=dt_val).alignment = align_center
+
+            for c in range(1, 6):
+                cell = ws.cell(row=r_idx, column=c)
+                cell.font = font_data
+                cell.border = thin_border
+        
+        current_row = start_row + len(df_hab)
+    else:
+        # Linhas em branco vazias para modelo impresso
+        for i in range(1, 11):
+            r_idx = start_row + i - 1
+            ws.cell(row=r_idx, column=1, value=i).alignment = align_center
+            for c in range(1, 6):
+                cell = ws.cell(row=r_idx, column=c)
+                cell.font = font_data
+                cell.border = thin_border
+        current_row = start_row + 10
+
+    # L_Fim: Mensagem Legal do Decreto
+    current_row += 1
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5)
+    cell_legal = ws.cell(row=current_row, column=1)
+    cell_legal.value = "A relação acima, oriunda do controle biométrico e facial desta empresa, está sendo encaminhada nos termos do art. 38, § 5º, inciso III, do Decreto nº 11.615/2023."
+    cell_legal.font = font_legal
+    cell_legal.alignment = align_center
+
+    # Rodapé de Assinatura
+    current_row += 3
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5)
+    hoje_str = datetime.now().strftime("%d de %B de %Y")
+    cell_data = ws.cell(row=current_row, column=1)
+    cell_data.value = f"{CIDADE_UF_ENTIDADE}, {hoje_str}"
+    cell_data.font = font_data
+    cell_data.alignment = align_center
+
+    current_row += 2
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5)
+    cell_ass_gov = ws.cell(row=current_row, column=1)
+    cell_ass_gov.value = "Assinatura digital (Gov.br)"
+    cell_ass_gov.font = font_subtext
+    cell_ass_gov.alignment = align_center
+
+    current_row += 1
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5)
+    cell_resp_nome = ws.cell(row=current_row, column=1)
+    cell_resp_nome.value = NOME_RESPONSAVEL_ENTIDADE
+    cell_resp_nome.font = font_legal
+    cell_resp_nome.alignment = align_center
+
+    current_row += 1
+    ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5)
+    cell_resp_cargo = ws.cell(row=current_row, column=1)
+    cell_resp_cargo.value = "RESPONSÁVEL PELA ENTIDADE DE TIRO"
+    cell_resp_cargo.font = font_data
+    cell_resp_cargo.alignment = align_center
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -312,7 +469,6 @@ with col_centro:
     aba = st.radio("Selecione o Modo:", ["🎯 Registro de Habituação (Atirador)", "📊 Painel Admin / Exportar"], horizontal=True)
 
     if aba == "🎯 Registro de Habituação (Atirador)":
-        # TÍTULO COM A LOGO DO CCTU INCORPORADA ANTES DO TEXTO
         if LOGO_B64:
             st.markdown(
                 f"""
@@ -489,7 +645,7 @@ with col_centro:
                     st.error(f"Erro ao salvar: {e}")
 
     else:
-        # --- PAINEL ADMINISTRATIVO COM FILTROS DE ATIRADOR E DATAS ---
+        # --- PAINEL ADMINISTRATIVO COM FILTROS E OPÇÕES DE EXPORTAÇÃO ---
         col_titulo, col_filtro = st.columns([1.5, 1])
         with col_titulo:
             if LOGO_B64:
@@ -541,15 +697,19 @@ with col_centro:
             if cliente_selecionado and cliente_selecionado != "Todos os Atiradores":
                 df_filtrado = df_filtrado[df_filtrado['nome_atirador'] == cliente_selecionado]
 
+            str_mes_ano = "MÊS DE ________ DE 2026"
+
             if 'data_hora' in df_filtrado.columns and isinstance(intervalo_datas, (list, tuple)) and len(intervalo_datas) > 0:
                 df_filtrado['dt_parsed'] = pd.to_datetime(df_filtrado['data_hora'], errors='coerce').dt.date
                 
                 if len(intervalo_datas) == 2:
                     data_ini, data_fim = intervalo_datas[0], intervalo_datas[1]
                     df_filtrado = df_filtrado[(df_filtrado['dt_parsed'] >= data_ini) & (df_filtrado['dt_parsed'] <= data_fim)]
+                    str_mes_ano = f"PERÍODO DE {data_ini.strftime('%d/%m/%Y')} A {data_fim.strftime('%d/%m/%Y')}"
                 elif len(intervalo_datas) == 1:
                     data_unica = intervalo_datas[0]
                     df_filtrado = df_filtrado[df_filtrado['dt_parsed'] == data_unica]
+                    str_mes_ano = f"DIA {data_unica.strftime('%d/%m/%Y')}"
 
                 df_filtrado = df_filtrado.drop(columns=['dt_parsed'], errors='ignore')
 
@@ -592,24 +752,36 @@ with col_centro:
 
                 st.markdown("---")
                 
-                col_btn_excel, col_btn_pdf = st.columns([1, 1])
+                # BOTÕES DE EXPORTAÇÃO
+                st.subheader("📥 Exportação de Relatórios")
+                col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
 
-                with col_btn_excel:
-                    excel_data = gerar_excel_com_assinaturas(df_filtrado)
+                with col_btn1:
+                    excel_sfpc = gerar_excel_modelo_sfpc(df_filtrado, periodo_mes_ano=str_mes_ano)
                     st.download_button(
-                        label="📥 Baixar Planilha Completa com Assinaturas (Excel)",
-                        data=excel_data,
-                        file_name=f"habituacoes_com_assinaturas_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        label="📋 Relação Oficial SFPC (Excel)",
+                        data=excel_sfpc,
+                        file_name=f"relacao_oficial_sfpc_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         type="primary",
                         use_container_width=True
                     )
 
-                with col_btn_pdf:
+                with col_btn2:
+                    excel_data = gerar_excel_com_assinaturas(df_filtrado)
+                    st.download_button(
+                        label="📥 Planilha Completa c/ Assinaturas",
+                        data=excel_data,
+                        file_name=f"habituacoes_com_assinaturas_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+
+                with col_btn3:
                     if cliente_selecionado and cliente_selecionado != "Todos os Atiradores" and not df_filtrado.empty:
                         pdf_data = gerar_pdf_relatorio_cliente(df_filtrado, cliente_selecionado)
                         st.download_button(
-                            label=f"📄 Baixar Relatório PDF ({cliente_selecionado})",
+                            label=f"📄 Relatório PDF ({cliente_selecionado})",
                             data=pdf_data,
                             file_name=f"relatorio_habituação_{cliente_selecionado.replace(' ', '_')}.pdf",
                             mime="application/pdf",
