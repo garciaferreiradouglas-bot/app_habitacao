@@ -38,8 +38,26 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- NOME DO FICHEIRO DA LOGO DIREITA ---
-PATH_LOGO_DIREITA = "LOGO_CCTU-removebg-preview.png"
+# --- NOME DO FICHEIRO DA LOGO ---
+PATH_LOGO = "LOGO_CCTU-removebg-preview.png"
+
+# --- FUNÇÃO PARA OBTER A LOGO EM BASE64 PARA EXIBIR EM LINHA COM O TÍTULO ---
+def obter_logo_base64():
+    path_final = None
+    if os.path.exists(PATH_LOGO):
+        path_final = PATH_LOGO
+    elif os.path.exists("LOGO_CCTU-removebg-preview.jpg"):
+        path_final = "LOGO_CCTU-removebg-preview.jpg"
+
+    if path_final:
+        try:
+            with open(path_final, "rb") as image_file:
+                return base64.b64encode(image_file.read()).decode('utf-8')
+        except Exception:
+            return ""
+    return ""
+
+LOGO_B64 = obter_logo_base64()
 
 # --- AUTENTICAÇÃO E CONEXÃO COM GOOGLE SHEETS ---
 SCOPES = [
@@ -287,21 +305,27 @@ if "form_version" not in st.session_state:
 
 v = st.session_state["form_version"]
 
-# --- LAYOUT COM FORMULÁRIO CENTRALIZADO E LOGO À DIREITA ---
-col_espaco, col_centro, col_direita = st.columns([1, 6, 1.5])
-
-with col_direita:
-    st.write("")
-    if os.path.exists(PATH_LOGO_DIREITA):
-        st.image(PATH_LOGO_DIREITA, use_container_width=True)
-    elif os.path.exists("LOGO_CCTU-removebg-preview.jpg"):
-        st.image("LOGO_CCTU-removebg-preview.jpg", use_container_width=True)
+# --- CONTAINER PRINCIPAL CENTRALIZADO ---
+col_esq, col_centro, col_dir = st.columns([1, 8, 1])
 
 with col_centro:
     aba = st.radio("Selecione o Modo:", ["🎯 Registro de Habituação (Atirador)", "📊 Painel Admin / Exportar"], horizontal=True)
 
     if aba == "🎯 Registro de Habituação (Atirador)":
-        st.title("🎯 Registro de Habituação")
+        # TÍTULO COM A LOGO DO CCTU INCORPORADA ANTES DO TEXTO
+        if LOGO_B64:
+            st.markdown(
+                f"""
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+                    <img src="data:image/png;base64,{LOGO_B64}" style="height: 55px; width: auto; object-fit: contain;">
+                    <h1 style="margin: 0; padding: 0; font-size: 2rem;">Registro de Habituação</h1>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.title("Registro de Habituação")
+
         st.write("Preencha os dados da sessão de tiro e assine no campo abaixo.")
 
         df_hab = carregar_habituacoes_sheets()
@@ -468,7 +492,18 @@ with col_centro:
         # --- PAINEL ADMINISTRATIVO COM FILTROS DE ATIRADOR E DATAS ---
         col_titulo, col_filtro = st.columns([1.5, 1])
         with col_titulo:
-            st.title("📊 Painel Administrativo")
+            if LOGO_B64:
+                st.markdown(
+                    f"""
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+                        <img src="data:image/png;base64,{LOGO_B64}" style="height: 50px; width: auto; object-fit: contain;">
+                        <h1 style="margin: 0; padding: 0; font-size: 2rem;">Painel Administrativo</h1>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.title("📊 Painel Administrativo")
             
         with st.spinner("Buscando registros da nuvem..."):
             df_hab = carregar_habituacoes_sheets()
