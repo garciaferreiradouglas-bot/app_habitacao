@@ -1,9 +1,10 @@
 streamlit
-streamlit-drawable-canvas
 pandas
-Pillow
+pillow
 numpy
 openpyxl
 gspread
 google-auth
 fpdf2
+streamlit-drawable-canvas
+pytz
