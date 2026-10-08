@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_drawable_canvas import st_canvas
 import pandas as pd
 from PIL import Image
@@ -34,7 +35,32 @@ FUSO_SP = pytz.timezone("America/Sao_Paulo")
 def obter_data_hora_atual():
     return datetime.now(FUSO_SP)
 
-# --- CSS E JAVASCRIPT PARA FORÇAR TECLADO NUMÉRICO E CAIXA ALTA EM TABLETS ---
+# --- INJEÇÃO HTML/JS DIRETA PARA FORÇAR TECLADO NUMÉRICO NOS INPUTS ---
+def forcar_teclado_numerico():
+    js_code = """
+    <script>
+    function aplicarInputMode() {
+        const doc = window.parent.document;
+        const inputs = doc.querySelectorAll('input[type="text"]');
+        inputs.forEach(input => {
+            const label = input.getAttribute('aria-label') || '';
+            const placeholder = input.getAttribute('placeholder') || '';
+            const textoCompleto = (label + ' ' + placeholder).toUpperCase();
+            
+            if (textoCompleto.includes('CR') || textoCompleto.includes('CPF') || textoCompleto.includes('SIGMA') || textoCompleto.includes('MUNIÇÃO')) {
+                input.setAttribute('inputmode', 'numeric');
+                input.setAttribute('pattern', '[0-9]*');
+            }
+        });
+    }
+    setTimeout(aplicarInputMode, 300);
+    setTimeout(aplicarInputMode, 1000);
+    setInterval(aplicarInputMode, 2000);
+    </script>
+    """
+    components.html(js_code, height=0)
+
+# --- CSS PARA FORÇAR CAIXA ALTA (MAIÚSCULAS) EM TEMPO REAL ---
 st.markdown(
     """
     <style>
@@ -42,22 +68,12 @@ st.markdown(
         text-transform: uppercase;
     }
     </style>
-    <script>
-    const observer = new MutationObserver((mutations) => {
-        const inputs = parent.document.querySelectorAll('input[type="text"]');
-        inputs.forEach(input => {
-            const placeholder = input.getAttribute('placeholder') || '';
-            const label = input.getAttribute('aria-label') || '';
-            if (placeholder.includes('CR') || placeholder.includes('CPF') || placeholder.includes('SIGMA') || placeholder.includes('quantidade') || label.includes('CR') || label.includes('CPF') || label.includes('SIGMA')) {
-                input.setAttribute('inputmode', 'numeric');
-            }
-        });
-    });
-    observer.observe(parent.document.body, { childList: true, subtree: true });
-    </script>
     """,
     unsafe_allow_html=True
 )
+
+# Executa o script que injeta 'inputmode=numeric' diretamente na página principal
+forcar_teclado_numerico()
 
 # --- DADOS INSTITUCIONAIS DA ENTIDADE DE TIRO (PARA RELATÓRIO OFICIAL SFPC) ---
 NOME_ENTIDADE_TIRO = "CLUBE DE CAÇA E TIRO URBANO"
@@ -573,14 +589,7 @@ with col_centro:
         with col2:
             tipo_municao = st.selectbox("Tipo/Calibre de Munição:", OPCOES_MUNICAO_POR_ARMA[tipo_arma], key=f"select_tipo_municao_{v}")
 
-        # Campo com number_input para abrir direto o teclado numérico
-        qtd_input_val = st.number_input(
-            "Quantidade de Munição Utilizada:", 
-            min_value=1, 
-            step=1, 
-            value=10, 
-            key=f"input_qtd_{v}"
-        )
+        qtd_input = st.text_input("Quantidade de Munição Utilizada:", value="10", placeholder="Informe a quantidade de munição", key=f"input_qtd_{v}")
 
         st.subheader("🖋️ Assinatura Digital")
         st.caption("Assine dentro da caixa abaixo:")
@@ -625,7 +634,18 @@ with col_centro:
                 st.error("⚠️ Preenchimento obrigatório: Por favor, informe o número do SIGMA.")
                 st.stop()
 
-            qtd_municao = int(qtd_input_val)
+            if not qtd_input or not qtd_input.strip():
+                st.error("⚠️ Preenchimento obrigatório: Por favor, informe a quantidade de munição utilizada.")
+                st.stop()
+
+            try:
+                qtd_municao = int(qtd_input.strip())
+                if qtd_municao <= 0:
+                    st.error("⚠️ A quantidade de munição deve ser maior que zero.")
+                    st.stop()
+            except ValueError:
+                st.error("⚠️ Por favor, informe um número válido para a quantidade de munição.")
+                st.stop()
 
             if is_novo_cadastro and lista_cadastrados:
                 nomes_existentes = [a['nome'].upper() for a in lista_cadastrados]
