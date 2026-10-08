@@ -34,7 +34,7 @@ FUSO_SP = pytz.timezone("America/Sao_Paulo")
 def obter_data_hora_atual():
     return datetime.now(FUSO_SP)
 
-# --- CSS PARA FORÇAR CAIXA ALTA (MAIÚSCULAS) EM TEMPO REAL NOS CAMPOS DE TEXTO ---
+# --- CSS E JAVASCRIPT PARA FORÇAR TECLADO NUMÉRICO E CAIXA ALTA EM TABLETS ---
 st.markdown(
     """
     <style>
@@ -42,6 +42,19 @@ st.markdown(
         text-transform: uppercase;
     }
     </style>
+    <script>
+    const observer = new MutationObserver((mutations) => {
+        const inputs = parent.document.querySelectorAll('input[type="text"]');
+        inputs.forEach(input => {
+            const placeholder = input.getAttribute('placeholder') || '';
+            const label = input.getAttribute('aria-label') || '';
+            if (placeholder.includes('CR') || placeholder.includes('CPF') || placeholder.includes('SIGMA') || placeholder.includes('quantidade') || label.includes('CR') || label.includes('CPF') || label.includes('SIGMA')) {
+                input.setAttribute('inputmode', 'numeric');
+            }
+        });
+    });
+    observer.observe(parent.document.body, { childList: true, subtree: true });
+    </script>
     """,
     unsafe_allow_html=True
 )
@@ -144,7 +157,7 @@ def processar_imagem_canvas(img_array):
         st.error(f"Erro ao processar imagem da assinatura: {e}")
         return ""
 
-def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
+def salvar_habituação_sheets(nome, cr, cpf, sigma, arma, municao, qtd, img_array):
     assinatura_b64 = processar_imagem_canvas(img_array)
     if not assinatura_b64:
         raise ValueError("Não foi possível processar o desenho da assinatura.")
@@ -154,9 +167,10 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
 
     nome = nome.strip().upper()
     cr = cr.strip().upper()
+    cpf = cpf.strip().upper()
     sigma = sigma.strip().upper() if sigma else ""
 
-    payload_validacao = f"{data_hora_str}|{nome}|{cr}|{sigma}|{arma}|{municao}|{qtd}|{assinatura_b64[:50]}"
+    payload_validacao = f"{data_hora_str}|{nome}|{cr}|{cpf}|{sigma}|{arma}|{municao}|{qtd}|{assinatura_b64[:50]}"
     hash_integridade = hashlib.sha256(payload_validacao.encode('utf-8')).hexdigest()
 
     linha_dados = [
@@ -164,6 +178,7 @@ def salvar_habituação_sheets(nome, cr, sigma, arma, municao, qtd, img_array):
         data_hora_str,
         nome,
         cr,
+        cpf,
         sigma or "",
         arma,
         municao,
@@ -199,6 +214,10 @@ def obter_atiradores_existentes(df_hab):
             cr_val = ""
             if 'cr_atirador' in group.columns and not group['cr_atirador'].dropna().empty:
                 cr_val = str(group['cr_atirador'].dropna().iloc[-1]).strip().upper()
+
+            cpf_val = ""
+            if 'cpf_atirador' in group.columns and not group['cpf_atirador'].dropna().empty:
+                cpf_val = str(group['cpf_atirador'].dropna().iloc[-1]).strip().upper()
             
             sigma_val = ""
             if 'sigma_atirador' in group.columns and not group['sigma_atirador'].dropna().empty:
@@ -208,6 +227,7 @@ def obter_atiradores_existentes(df_hab):
             atiradores.append({
                 "nome": nome_str,
                 "cr": cr_val,
+                "cpf": cpf_val,
                 "sigma": sigma_val,
                 "rotulo": label
             })
@@ -227,7 +247,7 @@ def obter_valor_assinatura(row):
             elif len(val_str) > 100 and not val_str.startswith("http") and not val_str.startswith("="):
                 return val_str
     try:
-        val_ind = row.iloc[8]
+        val_ind = row.iloc[9]
         if pd.notna(val_ind) and len(str(val_ind)) > 100:
             return str(val_ind).strip()
     except Exception:
@@ -239,22 +259,23 @@ def gerar_excel_com_assinaturas(df_hab):
     ws = wb.active
     ws.title = "Habituações"
     headers = [
-        "ID", "Data/Hora", "Nome Atirador", "CR", "SIGMA", 
+        "ID", "Data/Hora", "Nome Atirador", "CR", "CPF", "SIGMA", 
         "Tipo Arma", "Tipo Munição", "Qtd. Munição", "Assinatura Digital", "Hash Integridade"
     ]
     ws.append(headers)
-    ws.column_dimensions['I'].width = 25
+    ws.column_dimensions['J'].width = 25
 
     for row_idx, (_, row) in enumerate(df_hab.iterrows(), start=2):
         ws.cell(row=row_idx, column=1, value=row.get('id', ''))
         ws.cell(row=row_idx, column=2, value=row.get('data_hora', ''))
         ws.cell(row=row_idx, column=3, value=row.get('nome_atirador', ''))
         ws.cell(row=row_idx, column=4, value=row.get('cr_atirador', ''))
-        ws.cell(row=row_idx, column=5, value=row.get('sigma_atirador', ''))
-        ws.cell(row=row_idx, column=6, value=row.get('tipo_arma', ''))
-        ws.cell(row=row_idx, column=7, value=row.get('tipo_municao', ''))
-        ws.cell(row=row_idx, column=8, value=row.get('qtd_municao', ''))
-        ws.cell(row=row_idx, column=10, value=row.get('hash_integridade', ''))
+        ws.cell(row=row_idx, column=5, value=row.get('cpf_atirador', ''))
+        ws.cell(row=row_idx, column=6, value=row.get('sigma_atirador', ''))
+        ws.cell(row=row_idx, column=7, value=row.get('tipo_arma', ''))
+        ws.cell(row=row_idx, column=8, value=row.get('tipo_municao', ''))
+        ws.cell(row=row_idx, column=9, value=row.get('qtd_municao', ''))
+        ws.cell(row=row_idx, column=11, value=row.get('hash_integridade', ''))
         ws.row_dimensions[row_idx].height = 55
 
         assinatura_b64 = obter_valor_assinatura(row)
@@ -265,7 +286,7 @@ def gerar_excel_com_assinaturas(df_hab):
                 img = OpenPyxlImage(img_file)
                 img.width = 140
                 img.height = 60
-                ws.add_image(img, f"I{row_idx}")
+                ws.add_image(img, f"J{row_idx}")
             except Exception:
                 pass
 
@@ -420,8 +441,9 @@ def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
     pdf.cell(0, 8, f"Atirador: {nome_cliente.upper()}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
     
     cr_val = df_cliente['cr_atirador'].iloc[0] if 'cr_atirador' in df_cliente.columns and not df_cliente.empty else ""
-    if cr_val:
-        pdf.cell(0, 6, f"CR: {str(cr_val).upper()}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
+    cpf_val = df_cliente['cpf_atirador'].iloc[0] if 'cpf_atirador' in df_cliente.columns and not df_cliente.empty else ""
+
+    pdf.cell(0, 6, f"CR: {str(cr_val).upper()} | CPF: {str(cpf_val).upper()}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(8)
     
     for idx, row in df_cliente.iterrows():
@@ -510,22 +532,17 @@ with col_centro:
                 key=f"input_nome_{v}_{opcao_selecionada}"
             )
             cr_valor = ""
+            cpf_valor = ""
             sigma_valor = ""
         else:
             nome_input = atirador_obj['nome']
             cr_valor = atirador_obj['cr']
+            cpf_valor = atirador_obj.get('cpf', '')
             sigma_valor = atirador_obj['sigma']
             
             st.text_input("Nome Completo do Atirador:", value=nome_input, disabled=True, help="Atirador selecionado na busca acima.", key=f"input_nome_dis_{v}")
 
-        col_sigma, col_cr = st.columns(2)
-        with col_sigma:
-            sigma_input = st.text_input(
-                "Número do SIGMA:", 
-                value=sigma_valor if not is_novo_cadastro else "", 
-                placeholder="Informe o número do SIGMA", 
-                key=f"input_sigma_{v}_{opcao_selecionada}"
-            )
+        col_cr, col_cpf, col_sigma = st.columns(3)
         with col_cr:
             cr_input = st.text_input(
                 "Número do CR:", 
@@ -534,6 +551,21 @@ with col_centro:
                 disabled=not is_novo_cadastro, 
                 key=f"input_cr_{v}_{opcao_selecionada}"
             )
+        with col_cpf:
+            cpf_input = st.text_input(
+                "CPF do Atirador:", 
+                value=cpf_valor if not is_novo_cadastro else "", 
+                placeholder="Informe o CPF", 
+                disabled=not is_novo_cadastro, 
+                key=f"input_cpf_{v}_{opcao_selecionada}"
+            )
+        with col_sigma:
+            sigma_input = st.text_input(
+                "Número do SIGMA:", 
+                value=sigma_valor if not is_novo_cadastro else "", 
+                placeholder="Informe o número do SIGMA", 
+                key=f"input_sigma_{v}_{opcao_selecionada}"
+            )
 
         col1, col2 = st.columns(2)
         with col1:
@@ -541,7 +573,14 @@ with col_centro:
         with col2:
             tipo_municao = st.selectbox("Tipo/Calibre de Munição:", OPCOES_MUNICAO_POR_ARMA[tipo_arma], key=f"select_tipo_municao_{v}")
 
-        qtd_input = st.text_input("Quantidade de Munição Utilizada:", placeholder="Informe a quantidade utilizada", key=f"input_qtd_{v}")
+        # Campo com number_input para abrir direto o teclado numérico
+        qtd_input_val = st.number_input(
+            "Quantidade de Munição Utilizada:", 
+            min_value=1, 
+            step=1, 
+            value=10, 
+            key=f"input_qtd_{v}"
+        )
 
         st.subheader("🖋️ Assinatura Digital")
         st.caption("Assine dentro da caixa abaixo:")
@@ -567,6 +606,7 @@ with col_centro:
         if st.button("✅ Registrar Habituação", type="primary", use_container_width=True):
             nome_final = nome_input.strip().upper() if nome_input else ""
             cr_final = cr_input.strip().upper() if cr_input else ""
+            cpf_final = cpf_input.strip().upper() if cpf_input else ""
             sigma_final = sigma_input.strip().upper() if sigma_input else ""
 
             if not nome_final:
@@ -577,26 +617,20 @@ with col_centro:
                 st.error("⚠️ Preenchimento obrigatório: Por favor, informe o CR do Atirador.")
                 st.stop()
 
+            if not cpf_final:
+                st.error("⚠️ Preenchimento obrigatório: Por favor, informe o CPF do Atirador.")
+                st.stop()
+
             if not sigma_final:
                 st.error("⚠️ Preenchimento obrigatório: Por favor, informe o número do SIGMA.")
                 st.stop()
 
-            if not qtd_input or not qtd_input.strip():
-                st.error("⚠️ Preenchimento obrigatório: Por favor, informe a quantidade de munição utilizada.")
-                st.stop()
-
-            try:
-                qtd_municao = int(qtd_input.strip())
-                if qtd_municao <= 0:
-                    st.error("⚠️ A quantidade de munição deve ser maior que zero.")
-                    st.stop()
-            except ValueError:
-                st.error("⚠️ Por favor, informe um número válido para a quantidade de munição.")
-                st.stop()
+            qtd_municao = int(qtd_input_val)
 
             if is_novo_cadastro and lista_cadastrados:
                 nomes_existentes = [a['nome'].upper() for a in lista_cadastrados]
                 crs_existentes = [a['cr'].upper() for a in lista_cadastrados if a['cr']]
+                cpfs_existentes = [a.get('cpf', '').upper() for a in lista_cadastrados if a.get('cpf')]
 
                 if nome_final in nomes_existentes:
                     st.error(f"⚠️ Atirador já cadastrado! O nome '{nome_final}' já existe no sistema. Por favor, selecione-o no campo 'Buscar Atirador Cadastrado'.")
@@ -604,6 +638,10 @@ with col_centro:
 
                 if cr_final in crs_existentes:
                     st.error(f"⚠️ CR já cadastrado! O CR '{cr_final}' já pertence a outro atirador. Por favor, selecione seu cadastro acima.")
+                    st.stop()
+
+                if cpf_final in cpfs_existentes:
+                    st.error(f"⚠️ CPF já cadastrado! O CPF '{cpf_final}' já pertence a outro atirador. Por favor, selecione seu cadastro acima.")
                     st.stop()
 
             img_data = canvas_result.image_data if canvas_result is not None else None
@@ -623,6 +661,7 @@ with col_centro:
                     salvar_habituação_sheets(
                         nome_final,
                         cr_final,
+                        cpf_final,
                         sigma_final,
                         tipo_arma,
                         tipo_municao,
@@ -727,6 +766,7 @@ with col_centro:
                         with col_info:
                             st.markdown(f"**Atirador:** {row.get('nome_atirador', '')}")
                             st.markdown(f"**CR:** {row.get('cr_atirador', '')}")
+                            st.markdown(f"**CPF:** {row.get('cpf_atirador', 'N/A')}")
                             st.markdown(f"**SIGMA:** {row.get('sigma_atirador', 'N/A')}")
                             st.markdown(f"**Arma/Calibre:** {row.get('tipo_arma', '')} - {row.get('tipo_municao', '')}")
                             st.markdown(f"**Qtd. Munição:** {row.get('qtd_municao', '')}")
