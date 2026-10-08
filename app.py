@@ -5,7 +5,8 @@ from PIL import Image
 import io
 import base64
 import hashlib
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, date
+import pytz
 import numpy as np
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -27,11 +28,11 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CONFIGURAÇÃO DE FUSO HORÁRIO BRASÍLIA/SÃO PAULO (UTC-3) ---
-FUSO_BR = timezone(timedelta(hours=-3))
+# --- CONFIGURAÇÃO DE FUSO HORÁRIO BRASÍLIA/SÃO PAULO ---
+FUSO_SP = pytz.timezone("America/Sao_Paulo")
 
 def obter_data_hora_atual():
-    return datetime.now(FUSO_BR)
+    return datetime.now(FUSO_SP)
 
 # --- CSS PARA FORÇAR CAIXA ALTA (MAIÚSCULAS) EM TEMPO REAL NOS CAMPOS DE TEXTO ---
 st.markdown(
@@ -566,7 +567,7 @@ with col_centro:
         if st.button("✅ Registrar Habituação", type="primary", use_container_width=True):
             nome_final = nome_input.strip().upper() if nome_input else ""
             cr_final = cr_input.strip().upper() if cr_input else ""
-            sigma_final = sigma_input.strip().upper() if sigma_final else ""
+            sigma_final = sigma_input.strip().upper() if sigma_input else ""
 
             if not nome_final:
                 st.error("⚠️ Preenchimento obrigatório: Por favor, informe o Nome do Atirador.")
