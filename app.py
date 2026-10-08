@@ -38,8 +38,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- NOMES DOS FICHEIROS DAS IMAGENS/LOGOS ---
-PATH_LOGO_ESQUERDA = "Logo_Dominio-removebg-preview.jpg"
+# --- NOME DO FICHEIRO DA LOGO DIREITA ---
 PATH_LOGO_DIREITA = "LOGO_CCTU-removebg-preview.png"
 
 # --- AUTENTICAÇÃO E CONEXÃO COM GOOGLE SHEETS ---
@@ -288,15 +287,8 @@ if "form_version" not in st.session_state:
 
 v = st.session_state["form_version"]
 
-# --- DIVISÃO EM 3 COLUNAS (1 : 2 : 1) ---
-col_esquerda, col_centro, col_direita = st.columns([1, 2, 1])
-
-with col_esquerda:
-    st.write("")
-    if os.path.exists(PATH_LOGO_ESQUERDA):
-        st.image(PATH_LOGO_ESQUERDA, use_container_width=True)
-    elif os.path.exists("Logo_Dominio-removebg-preview.png"):
-        st.image("Logo_Dominio-removebg-preview.png", use_container_width=True)
+# --- LAYOUT COM FORMULÁRIO CENTRALIZADO E LOGO À DIREITA ---
+col_espaco, col_centro, col_direita = st.columns([1, 6, 1.5])
 
 with col_direita:
     st.write("")
@@ -497,7 +489,6 @@ with col_centro:
                 key="select_filtro_admin"
             )
 
-            # FILTRO POR INTERVALO DE DATAS (NOVO)
             intervalo_datas = st.date_input(
                 "📅 Filtrar por Período (Início - Fim):",
                 value=(),
@@ -512,11 +503,9 @@ with col_centro:
         else:
             df_filtrado = df_hab.copy()
 
-            # 1. Filtro por Atirador
             if cliente_selecionado and cliente_selecionado != "Todos os Atiradores":
                 df_filtrado = df_filtrado[df_filtrado['nome_atirador'] == cliente_selecionado]
 
-            # 2. Filtro por Intervalo de Datas
             if 'data_hora' in df_filtrado.columns and isinstance(intervalo_datas, (list, tuple)) and len(intervalo_datas) > 0:
                 df_filtrado['dt_parsed'] = pd.to_datetime(df_filtrado['data_hora'], errors='coerce').dt.date
                 
