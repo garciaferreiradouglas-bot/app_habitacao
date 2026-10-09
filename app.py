@@ -35,6 +35,13 @@ FUSO_SP = pytz.timezone("America/Sao_Paulo")
 def obter_data_hora_atual():
     return datetime.now(FUSO_SP)
 
+# Mapeamento dos meses em português
+MESES_PT = {
+    1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril",
+    5: "maio", 6: "junho", 7: "julho", 8: "agosto",
+    9: "setembro", 10: "outubro", 11: "novembro", 12: "dezembro"
+}
+
 # --- INJEÇÃO HTML/JS DIRETA PARA FORÇAR TECLADO NUMÉRICO NOS INPUTS ---
 def forcar_teclado_numerico():
     js_code = """
@@ -72,7 +79,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Executa o script que injeta 'inputmode=numeric' diretamente na página principal
 forcar_teclado_numerico()
 
 # --- DADOS INSTITUCIONAIS DA ENTIDADE DE TIRO (PARA RELATÓRIO OFICIAL SFPC) ---
@@ -82,7 +88,7 @@ CNPJ_ENTIDADE_TIRO = "00.000.000/0001-00"
 ENDERECO_ENTIDADE_TIRO = "RUA DO CLUBE, Nº 100 - CENTRO"
 SFPC_VINCULACAO = "5ª RM / SFPC"
 CIDADE_UF_ENTIDADE = "ITAPEJARA D'OESTE - PR"
-NOME_RESPONSAVEL_ENTIDADE = "RODRIGO HENRIQUE NEVES"
+NOME_RESPONSAVEL_ENTIDADE = "DOUGLAS GARCIA FERREIRA"
 
 # --- NOME DO FICHEIRO DA LOGO ---
 PATH_LOGO = "LOGO_CCTU-removebg-preview.png"
@@ -384,7 +390,12 @@ def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
             ws.cell(row=r_idx, column=2, value=str(row.get('nome_atirador', '')).upper()).alignment = align_left
             ws.cell(row=r_idx, column=3, value=str(row.get('cr_atirador', '')).upper()).alignment = align_center
             
-            cpf_val = str(row.get('cpf_atirador', '')) if 'cpf_atirador' in row else ""
+            # PREENCHIMENTO DO CPF
+            cpf_val = ""
+            for c_cpf in ['cpf_atirador', 'cpf', 'CPF']:
+                if c_cpf in row and pd.notna(row[c_cpf]) and str(row[c_cpf]).strip() != "":
+                    cpf_val = str(row[c_cpf]).strip().upper()
+                    break
             ws.cell(row=r_idx, column=4, value=cpf_val).alignment = align_center
             
             dt_val = str(row.get('data_hora', ''))
@@ -415,7 +426,8 @@ def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
 
     current_row += 3
     ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=5)
-    hoje_str = obter_data_hora_atual().strftime("%d de %B de %Y")
+    agora_sp = obter_data_hora_atual()
+    hoje_str = f"{agora_sp.day:02d} de {MESES_PT[agora_sp.month]} de {agora_sp.year}"
     cell_data = ws.cell(row=current_row, column=1)
     cell_data.value = f"{CIDADE_UF_ENTIDADE}, {hoje_str}"
     cell_data.font = font_data
@@ -750,7 +762,7 @@ with col_centro:
             if cliente_selecionado and cliente_selecionado != "Todos os Atiradores":
                 df_filtrado = df_filtrado[df_filtrado['nome_atirador'] == cliente_selecionado]
 
-            str_mes_ano = "MÊS DE ________ DE 2026"
+            str_mes_ano = f"MÊS DE {MESES_PT[obter_data_hora_atual().month].upper()} DE {obter_data_hora_atual().year}"
 
             if 'data_hora' in df_filtrado.columns and isinstance(intervalo_datas, (list, tuple)) and len(intervalo_datas) > 0:
                 df_filtrado['dt_parsed'] = pd.to_datetime(df_filtrado['data_hora'], errors='coerce').dt.date
