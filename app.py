@@ -35,7 +35,6 @@ FUSO_SP = pytz.timezone("America/Sao_Paulo")
 def obter_data_hora_atual():
     return datetime.now(FUSO_SP)
 
-# Mapeamento dos meses em português
 MESES_PT = {
     1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril",
     5: "maio", 6: "junho", 7: "julho", 8: "agosto",
@@ -238,8 +237,10 @@ def obter_atiradores_existentes(df_hab):
                 cr_val = str(group['cr_atirador'].dropna().iloc[-1]).strip().upper()
 
             cpf_val = ""
-            if 'cpf_atirador' in group.columns and not group['cpf_atirador'].dropna().empty:
-                cpf_val = str(group['cpf_atirador'].dropna().iloc[-1]).strip().upper()
+            for col_cpf in ['cpf_atirador', 'cpf', 'CPF']:
+                if col_cpf in group.columns and not group[col_cpf].dropna().empty:
+                    cpf_val = str(group[col_cpf].dropna().iloc[-1]).strip().upper()
+                    break
             
             sigma_val = ""
             if 'sigma_atirador' in group.columns and not group['sigma_atirador'].dropna().empty:
@@ -292,7 +293,14 @@ def gerar_excel_com_assinaturas(df_hab):
         ws.cell(row=row_idx, column=2, value=row.get('data_hora', ''))
         ws.cell(row=row_idx, column=3, value=row.get('nome_atirador', ''))
         ws.cell(row=row_idx, column=4, value=row.get('cr_atirador', ''))
-        ws.cell(row=row_idx, column=5, value=row.get('cpf_atirador', ''))
+        
+        cpf_val = ""
+        for c_cpf in ['cpf_atirador', 'cpf', 'CPF']:
+            if c_cpf in row and pd.notna(row[c_cpf]):
+                cpf_val = str(row[c_cpf]).strip().upper()
+                break
+        ws.cell(row=row_idx, column=5, value=cpf_val)
+        
         ws.cell(row=row_idx, column=6, value=row.get('sigma_atirador', ''))
         ws.cell(row=row_idx, column=7, value=row.get('tipo_arma', ''))
         ws.cell(row=row_idx, column=8, value=row.get('tipo_municao', ''))
@@ -390,7 +398,7 @@ def gerar_excel_modelo_sfpc(df_hab, periodo_mes_ano="MÊS DE ________ DE 2026"):
             ws.cell(row=r_idx, column=2, value=str(row.get('nome_atirador', '')).upper()).alignment = align_left
             ws.cell(row=r_idx, column=3, value=str(row.get('cr_atirador', '')).upper()).alignment = align_center
             
-            # PREENCHIMENTO DO CPF
+            # EXTRAÇÃO RESILIENTE DO CPF
             cpf_val = ""
             for c_cpf in ['cpf_atirador', 'cpf', 'CPF']:
                 if c_cpf in row and pd.notna(row[c_cpf]) and str(row[c_cpf]).strip() != "":
@@ -469,7 +477,12 @@ def gerar_pdf_relatorio_cliente(df_cliente, nome_cliente):
     pdf.cell(0, 8, f"Atirador: {nome_cliente.upper()}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
     
     cr_val = df_cliente['cr_atirador'].iloc[0] if 'cr_atirador' in df_cliente.columns and not df_cliente.empty else ""
-    cpf_val = df_cliente['cpf_atirador'].iloc[0] if 'cpf_atirador' in df_cliente.columns and not df_cliente.empty else ""
+    
+    cpf_val = ""
+    for c_cpf in ['cpf_atirador', 'cpf', 'CPF']:
+        if c_cpf in df_cliente.columns and not df_cliente.empty and pd.notna(df_cliente[c_cpf].iloc[0]):
+            cpf_val = df_cliente[c_cpf].iloc[0]
+            break
 
     pdf.cell(0, 6, f"CR: {str(cr_val).upper()} | CPF: {str(cpf_val).upper()}", border=0, new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(8)
@@ -798,7 +811,14 @@ with col_centro:
                         with col_info:
                             st.markdown(f"**Atirador:** {row.get('nome_atirador', '')}")
                             st.markdown(f"**CR:** {row.get('cr_atirador', '')}")
-                            st.markdown(f"**CPF:** {row.get('cpf_atirador', 'N/A')}")
+                            
+                            cpf_str = "N/A"
+                            for c_cpf in ['cpf_atirador', 'cpf', 'CPF']:
+                                if c_cpf in row and pd.notna(row[c_cpf]) and str(row[c_cpf]).strip() != "":
+                                    cpf_str = str(row[c_cpf]).strip()
+                                    break
+                            
+                            st.markdown(f"**CPF:** {cpf_str}")
                             st.markdown(f"**SIGMA:** {row.get('sigma_atirador', 'N/A')}")
                             st.markdown(f"**Arma/Calibre:** {row.get('tipo_arma', '')} - {row.get('tipo_municao', '')}")
                             st.markdown(f"**Qtd. Munição:** {row.get('qtd_municao', '')}")
